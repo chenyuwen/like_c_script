@@ -1,0 +1,43 @@
+%option noyywrap
+%{
+#include <stdlib.h>
+#include "test4.tab.h"
+
+struct expression *alloc_expression(void);
+%}
+
+%%
+"+" |
+"-" |
+"*" |
+"/" |
+"|" |
+"&" |
+"(" |
+")" |
+"," |
+"=" |
+";" |
+"{" |
+"}" |
+"%" { return yytext[0]; }
+
+"!=" |
+"==" |
+"<"  |
+">"  |
+">=" |
+"<=" { return CMP; }
+
+"if"    { return IF; }
+"while" { return WHILE; }
+"return" { return RETURN; }
+
+[a-zA-Z_]+[0-9a-zA-Z_]* {yylval.strval = strdup(yytext);return TAGNAME;}
+
+[0-9]+ {yylval.strval = strdup(yytext);return NUMBER;}
+0x[0-9a-fA-F]+ {yylval.strval = strdup(yytext); return NUMBER;}
+"#".* {}
+[ \t\n]  {}
+.  {printf("Mystery character:%c\n", *yytext);}
+%%
