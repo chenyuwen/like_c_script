@@ -3,339 +3,232 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits.h>
+#include <stdarg.h>
+#include <errno.h>
 #include "gnu_list.h"
 
+#define YYDEBUG 1
+int yydebug = 1;
 int yylex();
 void yyerror(char *s);
 
-enum {
-	EXP_NUMBER,
-	EXP_CALLFUNC,
-	EXP_TWO_PARAM,
-	EXP_SINGLE_PARAM,
-	EXP_ASSIGN,
-	EXP_VAR,
-};
-
-enum {
-	CMP_NOT_EQUAL,
-	CMP_EQUAL,
-	CMP_
-};
-
+#define EXPRESSION_ARGV_MAX (5)
 struct expression {
-	int type;
+	const char *operation;
+
+	size_t argc;
+	void *argv[EXPRESSION_ARGV_MAX];
+};
+struct expression *root = NULL;
+
+enum arith_express_type {
+	AE_TYPE_INT,
+	AE_TYPE_FLOAT,
+};
+
+struct arith_express_result {
+	enum arith_express_type type;
 
 	union {
-		const char *number;
-		const char *varname;
-
-		struct {
-			const char *name;
-			struct expression *argument;
-		};
-
-		struct {
-			char operation;
-			struct expression *arg1, *arg2;
-		};
+		int intval;
+		float floatval;
 	};
 };
 
 struct variable {
 	struct list_head list;
 	const char *name;
-	int intval;
+	struct arith_express_result result;
 };
 
-struct expression *alloc_number_expression(const char *number)
+struct context {
+	struct list_head variable_lists;
+	struct list_head function_lists;
+};
+
+struct expression *alloc_expression(const char *operation, const size_t argc, ...)
 {
 	struct expression *express = NULL;
+	size_t i = 0;
+	va_list args;
 
 	express = malloc(sizeof(struct expression));
 	if (express == NULL) {
 		printf("%s: alloc memory failed.\n", __func__);
 		return NULL;
 	}
+	memset(express, 0, sizeof(struct expression));
 
-	express->type = EXP_NUMBER;
-	express->number = number;
-	return express;
-}
-
-struct expression *alloc_var_expression(const char *varname)
-{
-	struct expression *express = NULL;
-
-	express = malloc(sizeof(struct expression));
-	if (express == NULL) {
-		printf("%s: alloc memory failed.\n", __func__);
-		return NULL;
+	printf("%s: \n", operation);
+	va_start(args, argc);
+	for (i = 0; i < argc; i++) {
+		express->argv[i] = va_arg(args, void *);
 	}
+	va_end(args);
 
-	express->type = EXP_VAR;
-	express->varname = varname;
-	return express;
-}
-
-struct expression *alloc_callfunc_expression(const char *funcname,
-	struct expression *argument)
-{
-	struct expression *express = NULL;
-
-	express = malloc(sizeof(struct expression));
-	if (express == NULL) {
-		printf("%s: alloc memory failed.\n", __func__);
-		return NULL;
-	}
-
-	express->type = EXP_CALLFUNC;
-	express->name = funcname;
-	express->argument = argument;
-	return express;
-}
-
-struct expression *alloc_two_param_expression(struct expression *arg1, char operation,
-	struct expression *arg2)
-{
-	struct expression *express = NULL;
-
-	express = malloc(sizeof(struct expression));
-	if (express == NULL) {
-		printf("%s: alloc memory failed.\n", __func__);
-		return NULL;
-	}
-
-	express->type = EXP_TWO_PARAM;
 	express->operation = operation;
-	express->arg1 = arg1;
-	express->arg2 = arg2;
 	return express;
 }
 
-struct expression *alloc_single_param_expression(char operation, struct expression *arg)
+int do_number(struct expression *express, struct arith_express_result *result)
 {
-	struct expression *express = NULL;
+	const char *num = express->argv[0];
 
-	express = malloc(sizeof(struct expression));
-	if (express == NULL) {
-		printf("%s: alloc memory failed.\n", __func__);
-		return NULL;
+	if (!strncmp(num, "0x", 2)) {
+		result->intval = strtol(num, NULL, 16);
+		return 0;
 	}
-
-	express->type = EXP_SINGLE_PARAM;
-	express->operation = operation;
-	express->arg1 = arg;
-	return express;
-}
-
-struct expression *alloc_assign_expression(const char *argname,
-	struct expression *argument)
-{
-	struct expression *express = NULL;
-
-	express = malloc(sizeof(struct expression));
-	if (express == NULL) {
-		printf("%s: alloc memory failed.\n", __func__);
-		return NULL;
-	}
-
-	express->type = EXP_ASSIGN;
-	express->name = argname;
-	express->argument = argument;
-	return express;
-}
-
-extern int expression_run(struct expression *express);
-
-int do_func_min(struct expression *express)
-{
-	int ret = INT_MAX, newval = 0;
-	struct expression *next = NULL;
-
-	for (next = express->argument; next != NULL; next = next->arg2) {
-		switch (next->operation) {
-		case 'A':
-			newval = expression_run(next->arg1);
-			break;
-		default:
-			newval = expression_run(next);
-			break;
-		}
-
-		if (newval < ret) {
-			ret = newval;
-		}
-	}
-
-	return ret;
-}
-
-int do_func_max(struct expression *express)
-{
-	int ret = 0, newval = 0;
-	struct expression *next = NULL;
-
-	for (next = express->argument; next != NULL; next = next->arg2) {
-		switch (next->operation) {
-		case 'A':
-			newval = expression_run(next->arg1);
-			break;
-		default:
-			newval = expression_run(next);
-			break;
-		}
-		if (newval > ret) {
-			ret = newval;
-		}
-	}
-
-	return ret;
-}
-
-int do_func_print(struct expression *express)
-{
-	int ret = 0, newval = 0;
-	struct expression *next = NULL;
-
-	for (next = express->argument; next != NULL; next = next->arg2) {
-		switch (next->operation) {
-		case 'A':
-			newval = expression_run(next->arg1);
-			break;
-		default:
-			newval = expression_run(next);
-			break;
-		}
-		printf("%d\n", newval);
-	}
-
-	return ret;
-}
-
-int do_callfunc(struct expression *express)
-{
-	int ret = 0;
-
-	if (!strcmp(express->name, "MIN")) {
-		return do_func_min(express);
-	} else if (!strcmp(express->name, "MAX")) {
-		return do_func_max(express);
-	} else if (!strcmp(express->name, "PRINT")) {
-		return do_func_print(express);
-	}
+	result->intval = strtol(num, NULL, 10);
 	return 0;
 }
 
-int do_two_param(struct expression *express)
-{
-	switch (express->operation) {
-	case '+':
-		return expression_run(express->arg1) + expression_run(express->arg2);
-	case '-':
-		return expression_run(express->arg1) - expression_run(express->arg2);
-	case '*':
-		return expression_run(express->arg1) * expression_run(express->arg2);
-	case '/':
-		return expression_run(express->arg1) / expression_run(express->arg2);
-	case '&':
-		return expression_run(express->arg1) & expression_run(express->arg2);
-	case '|':
-		return expression_run(express->arg1) | expression_run(express->arg2);
-
-	case 'I':
-		if (expression_run(express->arg1)) {
-			expression_run(express->arg2);
-		}
-		return 0;
-	case 'W':
-		while (expression_run(express->arg1)) {
-			expression_run(express->arg2);
-		}
-		return 0;
-	}
-}
-
-int do_single_param(struct expression *express)
-{
-	int ret = 0;
-	switch (express->operation) {
-	case '-':
-		return -expression_run(express->arg1);
-	case '(':
-		return expression_run(express->arg1);
-	case '|':
-		ret = expression_run(express->arg1);
-		if (ret < 0) {
-			return -ret;
-		}
-		return ret;
-	}
-}
-
-int do_number(struct expression *express)
-{
-	if (!strncmp(express->number, "0x", 2)) {
-		return strtol(express->number, NULL, 16);
-	}
-	return strtol(express->number, NULL, 10);
-}
-
-struct list_head variable_list = LIST_HEAD_INIT(variable_list);
-int do_assign(struct expression *express)
-{
-	struct variable *pos = NULL, *var = NULL;
-
-	list_for_each_entry(pos, &variable_list, list) {
-		if (!strcmp(pos->name, express->name)) {
-			var = pos;
-			break;
-		}
-	}
-
-	if (var == NULL) {
-		var = malloc(sizeof(struct variable));
-		if (var == NULL) {
-			return -1;
-		}
-
-		var->name = express->name;
-		list_add(&var->list, &variable_list);
-	}
-
-	var->intval = expression_run(express->argument);
-	return 0;
-}
-
-int do_var(struct expression *express)
+int do_symbol_var(struct context *ctx, struct list_head *local_variables,
+	struct expression *express, struct arith_express_result *result)
 {
 	struct variable *pos = NULL;
+	const char *varname = express->argv[0];
 
-	list_for_each_entry(pos, &variable_list, list) {
-		if (!strcmp(pos->name, express->name)) {
-			return pos->intval;
+	list_for_each_entry(pos, &ctx->variable_lists, list) {
+		if (!strcmp(pos->name, varname)) {
+			*result = pos->result;
+			return 0;
 		}
+	}
+
+	/* local variable */
+	return -EINVAL;
+}
+
+int do_arithmetic_expression(struct context *ctx, struct expression *express,
+	struct arith_express_result *result)
+{
+	struct arith_express_result result1, result2;
+	int ret = 0;
+
+	if (!strcmp(express->operation, "number")) {
+		return do_number(express, result);
+	} else if (!strcmp(express->operation, "symbol")) {
+		return do_symbol_var(ctx, NULL, express, result);
+	}
+
+	result1 = *result;
+	result2 = *result;
+	ret = do_arithmetic_expression(ctx, express->argv[0], &result1);
+	ret = do_arithmetic_expression(ctx, express->argv[1], &result2);
+	if (!strcmp(express->operation, "+")) {
+		result->intval = result1.intval + result2.intval;
+		return 0;
+	} else if (!strcmp(express->operation, "-")) {
+		result->intval = result1.intval - result2.intval;
+		return 0;
+	} else if (!strcmp(express->operation, "*")) {
+		result->intval = result1.intval * result2.intval;
+		return 0;
+	} else if (!strcmp(express->operation, "/")) {
+		result->intval = result1.intval * result2.intval;
+		return 0;
+	} else if (!strcmp(express->operation, "&")) {
+		result->intval = result1.intval & result2.intval;
+		return 0;
+	} else if (!strcmp(express->operation, "&")) {
+		result->intval = result1.intval & result2.intval;
+		return 0;
 	}
 	return 0;
 }
 
-int expression_run(struct expression *express)
+int do_data_type(struct expression *express, enum arith_express_type *type)
 {
-	switch (express->type) {
-	case EXP_NUMBER:
-		return do_number(express);
-	case EXP_VAR:
-		return do_var(express);
-	case EXP_CALLFUNC:
-		return do_callfunc(express);
-	case EXP_TWO_PARAM:
-		return do_two_param(express);
-	case EXP_SINGLE_PARAM:
-		return do_single_param(express);
-	case EXP_ASSIGN:
-		return do_assign(express);
+	const char *data_type = express->argv[0];
+
+	printf("OK %s: %s\n", express->operation, data_type);
+	if (!strcmp(data_type, "int")) {
+		return AE_TYPE_INT;
+	} else if (!strcmp(data_type, "float")) {
+		return AE_TYPE_FLOAT;
+	}
+	return 0;
+}
+
+int do_declare_variable(struct context *ctx, struct expression *express)
+{
+	enum arith_express_type type;
+	struct expression *next = NULL;
+	struct variable *var = NULL;
+	int ret = 0;
+
+	ret = do_data_type(express->argv[0], &type);
+	if (ret < 0) {
+		return ret;
 	}
 
+	for (next = express->argv[1]; next != NULL; next = next->argv[1]) {
+		struct expression *var_exp = next->argv[0];
+
+		var = malloc(sizeof(struct variable));
+		if (var == NULL) {
+			return -ENOMEM;
+		}
+
+		var->name = var_exp->argv[0];
+		var->result.type = type;
+		var->result.intval = 0;
+		if (var_exp->argv[1] != NULL) {
+			ret = do_arithmetic_expression(ctx, var_exp->argv[1],
+				&var->result);
+			if (ret < 0) {
+				free(var);
+				return ret;
+			}
+		}
+		list_add(&var->list, &ctx->variable_lists);
+		printf("%s = %d\n", (const char *)var->name, var->result.intval);
+	}
+	return 0;
+}
+
+int do_declare_function(struct expression *express)
+{
+	printf("FUNC %s: \n", express->operation);
+	printf("FUNC name %s: \n", (const char *)express->argv[1]);
+	return 0;
+}
+
+int do_declare_variable_and_function(struct context *ctx, struct expression *express)
+{
+	struct expression *next = NULL;
+	printf("KK%s: \n", express->operation);
+
+	if (strcmp(express->operation, "declare_variable_and_function")) {
+		return -1;
+	}
+	next = express->argv[0];
+
+	if (!strcmp(next->operation, "declare_function")) {
+		return do_declare_function(next);
+	} else if (!strcmp(next->operation, "declare_varible")) {
+		return do_declare_variable(ctx, next);
+	}
+	return 0;
+}
+
+int do_root(struct context *ctx, struct expression *express)
+{
+	struct expression *next = NULL;
+	int ret = 0;
+
+	if (express == NULL) {
+		return 0;
+	}
+
+	for (next = express->argv[0]; next != NULL; next = next->argv[1]) {
+		printf("%s: \n", next->operation);
+
+		ret = do_declare_variable_and_function(ctx, next->argv[0]);
+		if (ret < 0) {
+			return ret;
+		}
+	}
 	return 0;
 }
 
@@ -362,101 +255,111 @@ int expression_run(struct expression *express)
 %left ';'
 %nonassoc '{' '}'
 
-%type <express> exp arguments explist
+%type <express> arithmetic_expression arguments expressions one_exp
 %type <express> declare_variable_and_function declare_variable_and_functions
+%type <express> data_type declare_function
+%type <express> varible_symbol varible_symbols
 %type <express> function_arguments declare_varible
+%type <express> root
 %token <intval> CMP
 %token IF WHILE RETURN
-%token DATA_TYPE_INT DATA_TYPE_FLOAT
+%token DATA_TYPE_INT DATA_TYPE_FLOAT DATA_TYPE_VOLD DATA_TYPE_STRUCT
 
 %%
 
-calclist:
-	| declare_variable_and_functions { printf("# "); }
+root:
+	  declare_variable_and_functions { $$ = alloc_expression("root", 1, $1); root = $$; }
 	;
 
 declare_variable_and_functions:
-	  declare_variable_and_function {}
-	| declare_variable_and_functions declare_variable_and_function {}
+	  declare_variable_and_function { $$ = alloc_expression("declare_variable_and_functions", 2, $1, NULL); }
+	| declare_variable_and_function declare_variable_and_functions { $$ = alloc_expression("declare_variable_and_functions", 2, $1, $2); }
 	;
 
 declare_variable_and_function:
-	  declare_varible ';' {printf("dec0\n"); }
-	| declare_function {}
+	  declare_varible ';' { $$ = alloc_expression("declare_variable_and_function", 1, $1); }
+	| declare_function { $$ = alloc_expression("declare_variable_and_function", 1, $1); }
 	;
 
 declare_varible:
-	  data_type varible_symbols { printf("dec3\n");}
+	  data_type varible_symbols { $$ = alloc_expression("declare_varible", 2, $1, $2); }
 	;
 
 varible_symbols:
-	  varible_symbol {}
-	| varible_symbol ',' varible_symbols {}
+	  varible_symbol { $$= alloc_expression("varible_symbols", 2, $1, NULL); }
+	| varible_symbol ',' varible_symbols { $$= alloc_expression("varible_symbols", 2, $1, $3); }
 	;
 
 varible_symbol:
-	  SYMBOL {}
-	| SYMBOL '=' exp {}
+	  SYMBOL { $$= alloc_expression("varible_symbol", 1, $1); }
+	| SYMBOL '=' arithmetic_expression { $$= alloc_expression("varible_symbol", 2, $1, $3); }
 	;
 
 data_type:
-	  DATA_TYPE_INT
-	| DATA_TYPE_FLOAT
+	  DATA_TYPE_INT { $$= alloc_expression("data_type", 1, "int"); }
+	| DATA_TYPE_FLOAT{ $$= alloc_expression("data_type", 1, "float"); }
+	| DATA_TYPE_VOLD { $$= alloc_expression("data_type", 1, "vold"); }
+	| DATA_TYPE_STRUCT SYMBOL { $$= alloc_expression("data_type", 2, "struct", $2); }
 	;
 
 declare_function:
-	  SYMBOL '(' function_arguments ')' '{' '}' { printf("func %s\n", $1);}
-	| SYMBOL '(' function_arguments ')' '{' explist '}' { printf("func %s\n", $1);}
+	  data_type SYMBOL '(' function_arguments ')' '{' '}' { $$ = alloc_expression("declare_function", 4, $1, $2, $4, NULL); }
+	| data_type SYMBOL '(' function_arguments ')' '{' expressions '}' { $$ = alloc_expression("declare_function", 4, $1, $2, $4, $7); }
 	;
 
 function_arguments:
-	  { printf("%d\n", __LINE__); }
-	| data_type SYMBOL { printf("%d\n", __LINE__); }
-	| data_type SYMBOL ',' function_arguments { printf("%d\n", __LINE__); }
+	  { $$ = NULL; }
+	| data_type SYMBOL { $$ = alloc_expression("function_arguments", 2, $1, $2); }
+	| data_type SYMBOL ',' function_arguments { $$ = alloc_expression("function_arguments", 3, $1, $2, $4); }
 	;
 
-explist:
- 	  one_exp {}
-	| one_exp explist {printf("explist5\n"); }
+expressions:
+	  one_exp { $$ = alloc_expression("expressions", 1, $1); }
+	| one_exp expressions { $$ = alloc_expression("expressions", 2, $1, $2); }
 	;
 
 one_exp:
-	  exp ';' {printf("%d\n", __LINE__); }
-	| declare_varible ';' {printf("dec1\n"); }
-	| RETURN exp ';' {printf("return\n"); }
-	| WHILE '(' exp ')' '{' explist '}' {printf("while\n"); }
-	| WHILE '(' exp ')' '{' '}' {printf("while\n"); }
-	| IF '(' exp ')' '{' explist '}' {  }
-	| IF '(' exp ')' '{' '}' {  }
+	  arithmetic_expression ';' { $$ = alloc_expression("one_exp", 1, $1); }
+	| declare_varible ';' { $$ = alloc_expression("declare_variable", 0); }
+	| RETURN arithmetic_expression ';' { $$ = alloc_expression("return", 1, $2); }
+	| WHILE '(' arithmetic_expression ')' '{' expressions '}' { $$ = alloc_expression("if", 2, $3, $6);}
+	| WHILE '(' arithmetic_expression ')' '{' '}' { $$ = alloc_expression("while", 2, $3, NULL); }
+	| IF '(' arithmetic_expression ')' '{' expressions '}' { $$ = alloc_expression("if", 2, $3, $6); }
+	| IF '(' arithmetic_expression ')' '{' '}' { $$ = alloc_expression("if", 2, $3, NULL); }
 	;
 
-exp:
-          exp '+' exp {  }
-	| exp '-' exp {  }
-	| exp '*' exp {  }
-	| exp '/' exp {  }
-	| exp '&' exp {  }
-	| exp '|' exp {  }
-	| '|' exp '|' {  }
-	| '(' exp ')' {  }
-	| '-' exp     {  }
-	| NUMBER      {  }
-	| SYMBOL      {  }
-	| SYMBOL '(' arguments ')' {  }
-	| SYMBOL '=' exp {  }
+arithmetic_expression:
+          arithmetic_expression '+' arithmetic_expression { $$ = alloc_expression("+", 2, $1, $3); }
+	| arithmetic_expression '-' arithmetic_expression { $$ = alloc_expression("-", 2, $1, $3); }
+	| arithmetic_expression '*' arithmetic_expression { $$ = alloc_expression("*", 2, $1, $3); }
+	| arithmetic_expression '/' arithmetic_expression { $$ = alloc_expression("/", 2, $1, $3); }
+	| arithmetic_expression '&' arithmetic_expression { $$ = alloc_expression("&", 2, $1, $3); }
+	| arithmetic_expression '|' arithmetic_expression { $$ = alloc_expression("|", 2, $1, $3); }
+	| '|' arithmetic_expression '|' { $$ = alloc_expression("|", 1, $2); }
+	| '(' arithmetic_expression ')' { $$ = alloc_expression("(", 1, $2); }
+	| '-' arithmetic_expression     { $$ = alloc_expression("-", 1, $2); }
+	| NUMBER      { $$ = alloc_expression("number", 1, $1); }
+	| SYMBOL      { $$ = alloc_expression("symbol", 1, $1); }
+	| SYMBOL '(' arguments ')' { $$ = alloc_expression("call", 2, $1, $3); }
+	| SYMBOL '=' arithmetic_expression { $$ = alloc_expression("=", 2, $1, $3); }
 	;
 
 arguments:
-	  { }
-	| exp { }
-	| exp ',' arguments {  }
+	  { $$ = NULL; }
+	| arithmetic_expression { $$ = alloc_expression("arguments", 1, $1); }
+	| arithmetic_expression ',' arguments { $$ = alloc_expression("arguments", 2, $1, $3); }
 	;
 %%
 
 int main(int argc, char ** argv)
 {
-	printf("# ");
+	struct context ctx = {0};
+
 	yyparse();
+
+	INIT_LIST_HEAD(&ctx.variable_lists);
+	INIT_LIST_HEAD(&ctx.function_lists);
+	do_root(&ctx, root);
 }
 
 void yyerror(char *s)

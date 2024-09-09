@@ -34,6 +34,8 @@ struct expression *alloc_expression(void);
 "return" { return RETURN; }
 "int" { return DATA_TYPE_INT; }
 "float" { return DATA_TYPE_FLOAT; }
+"void" { return DATA_TYPE_VOLD; }
+"struct" { return DATA_TYPE_STRUCT; }
 
 "//".* {}
 

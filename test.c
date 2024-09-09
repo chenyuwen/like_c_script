@@ -1,6 +1,7 @@
 
-int k = 0, ff=33, ffk;
-main(int argc, int argv)
+int k = 0, ff=33 + 34, ffk;
+int bb=ff;
+int main(int argc, int argv)
 {
 	int k = 0;
 	k = 332;
@@ -9,17 +10,24 @@ main(int argc, int argv)
 	return b;
 }
 
-func2(int argc)
+int func2(int argc)
 {
 	return 0;
 }
 
-func3()
+void func3()
 {
 	if (33) {
+		while (1) {}
 	}
 
+	func3();
+	func3(44);
+	func4(ab, 33);
+
 	while (a=4 + 44) {
+		if (f) {
+		}
 	}
 }
 
