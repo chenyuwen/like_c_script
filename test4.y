@@ -350,7 +350,7 @@ int expression_run(struct expression *express)
 /*declare tokens */
 
 %token <strval> NUMBER
-%token <strval> TAGNAME
+%token <strval> SYMBOL
 
 %left '+' '-'
 %left '*' '/'
@@ -359,58 +359,98 @@ int expression_run(struct expression *express)
 %right '%'
 %left CMP
 %left '='
+%left ';'
+%nonassoc '{' '}'
 
-%type <express> exp arguments explist external
-%type <express> argument_declare_list
+%type <express> exp arguments explist
+%type <express> declare_variable_and_function declare_variable_and_functions
+%type <express> function_arguments declare_varible
 %token <intval> CMP
 %token IF WHILE RETURN
+%token DATA_TYPE_INT DATA_TYPE_FLOAT
 
 %%
 
 calclist:
-	| calclist external { expression_run($2); printf("# "); }
+	| declare_variable_and_functions { printf("# "); }
 	;
 
-external:
-	  TAGNAME '=' exp ';' { $$ = alloc_assign_expression($1, $3); }
-	| TAGNAME '(' argument_declare_list ')' '{' explist '}' { $$ = alloc_two_param_expression($3, '|', $6); }
+declare_variable_and_functions:
+	  declare_variable_and_function {}
+	| declare_variable_and_functions declare_variable_and_function {}
+	;
+
+declare_variable_and_function:
+	  declare_varible ';' {printf("dec0\n"); }
+	| declare_function {}
+	;
+
+declare_varible:
+	  data_type varible_symbols { printf("dec3\n");}
+	;
+
+varible_symbols:
+	  varible_symbol {}
+	| varible_symbol ',' varible_symbols {}
+	;
+
+varible_symbol:
+	  SYMBOL {}
+	| SYMBOL '=' exp {}
+	;
+
+data_type:
+	  DATA_TYPE_INT
+	| DATA_TYPE_FLOAT
+	;
+
+declare_function:
+	  SYMBOL '(' function_arguments ')' '{' '}' { printf("func %s\n", $1);}
+	| SYMBOL '(' function_arguments ')' '{' explist '}' { printf("func %s\n", $1);}
+	;
+
+function_arguments:
+	  { printf("%d\n", __LINE__); }
+	| data_type SYMBOL { printf("%d\n", __LINE__); }
+	| data_type SYMBOL ',' function_arguments { printf("%d\n", __LINE__); }
+	;
 
 explist:
-	  exp ';' { $$ = $1; }
-	| exp ';' explist { $$ = alloc_two_param_expression($1, 'E', $3); }
-	| WHILE '(' exp ')' '{' explist '}' { $$ = alloc_two_param_expression($3, 'W', $6); }
-	| IF '(' exp ')' '{' explist '}' { $$ = alloc_two_param_expression($3, 'I', $6); }
-	| RETURN exp ';' {}
+ 	  one_exp {}
+	| one_exp explist {printf("explist5\n"); }
+	;
+
+one_exp:
+	  exp ';' {printf("%d\n", __LINE__); }
+	| declare_varible ';' {printf("dec1\n"); }
+	| RETURN exp ';' {printf("return\n"); }
+	| WHILE '(' exp ')' '{' explist '}' {printf("while\n"); }
+	| WHILE '(' exp ')' '{' '}' {printf("while\n"); }
+	| IF '(' exp ')' '{' explist '}' {  }
+	| IF '(' exp ')' '{' '}' {  }
 	;
 
 exp:
-          exp '+' exp { $$ = alloc_two_param_expression($1, '+', $3); }
-	| exp '-' exp { $$ = alloc_two_param_expression($1, '-', $3); }
-	| exp '*' exp { $$ = alloc_two_param_expression($1, '*', $3); }
-	| exp '/' exp { $$ = alloc_two_param_expression($1, '/', $3); }
-	| exp '&' exp { $$ = alloc_two_param_expression($1, '&', $3); }
-	| exp '|' exp { $$ = alloc_two_param_expression($1, '|', $3); }
-	| '|' exp '|' { $$ = alloc_single_param_expression('|', $2); }
-	| '(' exp ')' { $$ = alloc_single_param_expression('(', $2); }
-	| '-' exp     { $$ = alloc_single_param_expression('-', $2); }
-	| NUMBER      { $$ = alloc_number_expression($1); }
-	| TAGNAME     { $$ = alloc_var_expression($1); }
-	| TAGNAME '(' arguments ')' { $$ = alloc_callfunc_expression($1, $3); }
-	| TAGNAME '=' exp { $$ = alloc_assign_expression($1, $3); }
+          exp '+' exp {  }
+	| exp '-' exp {  }
+	| exp '*' exp {  }
+	| exp '/' exp {  }
+	| exp '&' exp {  }
+	| exp '|' exp {  }
+	| '|' exp '|' {  }
+	| '(' exp ')' {  }
+	| '-' exp     {  }
+	| NUMBER      {  }
+	| SYMBOL      {  }
+	| SYMBOL '(' arguments ')' {  }
+	| SYMBOL '=' exp {  }
 	;
 
 arguments:
-	  { $$ = NULL; }
-	| exp { $$ = $1; }
-	| exp ',' arguments { $$ = alloc_two_param_expression($1, 'A', $3); }
+	  { }
+	| exp { }
+	| exp ',' arguments {  }
 	;
-
-argument_declare_list:
-	  { $$ = NULL; }
-	| TAGNAME { $$ = NULL; }
-	| TAGNAME ',' argument_declare_list { $$ = NULL; }
-	;
-
 %%
 
 int main(int argc, char ** argv)

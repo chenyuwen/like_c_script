@@ -32,8 +32,12 @@ struct expression *alloc_expression(void);
 "if"    { return IF; }
 "while" { return WHILE; }
 "return" { return RETURN; }
+"int" { return DATA_TYPE_INT; }
+"float" { return DATA_TYPE_FLOAT; }
 
-[a-zA-Z_]+[0-9a-zA-Z_]* {yylval.strval = strdup(yytext);return TAGNAME;}
+"//".* {}
+
+[a-zA-Z_]+[0-9a-zA-Z_]* {yylval.strval = strdup(yytext);return SYMBOL;}
 
 [0-9]+ {yylval.strval = strdup(yytext);return NUMBER;}
 0x[0-9a-fA-F]+ {yylval.strval = strdup(yytext); return NUMBER;}
