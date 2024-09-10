@@ -20,10 +20,9 @@ int main(int argc, int argv)
 		i = i + 3;
 	}
 	k = 1;
-	func3(k);
-	k = (222) * (33-2);
+	k = func3(k);
+	k = k + (222) * (33-2);
 	return ff;
-	return b;
 }
 
 int func2(int argc)
@@ -33,7 +32,7 @@ int func2(int argc)
 
 void func3(int age)
 {
-	age=age+11111;
-	return 0;
+	age=age+2;
+	return age;
 }
 

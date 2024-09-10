@@ -56,6 +56,7 @@ struct function {
 
 	size_t fargc;
 	struct variable *fargv;
+	struct arith_express_result result;
 
 	struct list_head variable_vector_lists;
 };
@@ -65,6 +66,7 @@ struct context {
 	struct list_head function_lists;
 
 	struct list_head used_lists;
+	int flag_returned;
 };
 
 struct expression *alloc_expression(const char *operation, const size_t argc, ...)
@@ -155,16 +157,18 @@ struct variable_vector *current_variable_vector(struct context *ctx)
 }
 
 int do_call_function(struct context *ctx, const char *fname,
-	struct arith_express_result *results, const size_t result_size);
+	struct arith_express_result *results, const size_t result_size,
+	struct arith_express_result *result);
 
 int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	struct arith_express_result *result);
 
-int do_call_with_expression(struct context *ctx, struct expression *express)
+int do_call_with_expression(struct context *ctx, struct expression *express,
+	struct arith_express_result *result)
 {
 	struct expression *next = NULL;
 	const char *fname = express->argv[0];
-	struct arith_express_result *result = NULL;
+	struct arith_express_result *fargv = NULL;
 	size_t argc = 0, i = 0;
 	int ret = 0;
 
@@ -173,26 +177,24 @@ int do_call_with_expression(struct context *ctx, struct expression *express)
 	}
 
 	printf("%s %s size: %lu\n", __func__, express->operation, argc);
-	result = malloc(sizeof(struct arith_express_result) * argc);
-	if (result == NULL) {
+	fargv = malloc(sizeof(struct arith_express_result) * argc);
+	if (fargv == NULL) {
 		return -ENOMEM;
 	}
 
 	for (next = express->argv[1]; next != NULL; next = next->argv[1]) {
-		struct arith_express_result *tmp = &result[i++];
+		struct arith_express_result *tmp = &fargv[i++];
 
 		printf("%s %s\n", __func__, next->operation);
 		ret = do_arithmetic_expression(ctx, next->argv[0], tmp);
 		if (ret < 0) {
-			free(result);
+			free(fargv);
 			return ret;
 		}
-
-		printf("result: %d\n", tmp->intval);
 	}
 
-	ret = do_call_function(ctx, fname, result, argc);
-	free(result);
+	ret = do_call_function(ctx, fname, fargv, argc, result);
+	free(fargv);
 	return ret;
 }
 
@@ -234,7 +236,10 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 		*result = var->result;
 		return 0;
 	} else if (!strcmp(express->operation, "call")) {
-		return do_call_with_expression(ctx, express);
+		ret = do_call_with_expression(ctx, express, &result1);
+
+		*result = result1;
+		return ret;
 	}
 
 	result1 = *result;
@@ -455,7 +460,7 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 			if (ret < 0) {
 				return ret;
 			}
-		} while (1);
+		} while (ctx->flag_returned);
 		return 0;
 	} else if (!strcmp(express->operation, "if")) {
 		struct arith_express_result result;
@@ -471,14 +476,19 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 		return 0;
 	} else if (!strcmp(express->operation, "return")) {
 		struct arith_express_result result;
+		struct function *func = NULL;
 
 		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
-		printf("return kk %d\n", result.intval);
 		if (ret < 0) {
-			printf("return  kkk %d\n", result.intval);
 			return ret;
 		}
 
+		ctx->flag_returned = 1;
+		func = list_first_entry(&ctx->used_lists, struct function, used);
+		if (func == NULL) {
+			return -EINVAL;
+		}
+		func->result = result;
 		printf("return OK %d\n", result.intval);
 		return 0;
 	}
@@ -499,12 +509,17 @@ int do_expressions(struct context *ctx, struct expression *express)
 		if (ret < 0) {
 			return ret;
 		}
+
+		if (ctx->flag_returned) {
+			break;
+		}
 	}
 	return 0;
 }
 
 int do_call_function(struct context *ctx, const char *fname,
-	struct arith_express_result *results, const size_t result_size)
+	struct arith_express_result *results, const size_t result_size,
+	struct arith_express_result *result)
 {
 	struct function *pos = NULL, *func = NULL;
 	struct variable_vector vector;
@@ -532,10 +547,13 @@ int do_call_function(struct context *ctx, const char *fname,
 	list_add_tail(&vector.list, &func->variable_vector_lists);
 
 	list_add(&func->used, &ctx->used_lists);
+	ctx->flag_returned = 0;
 	ret = do_expressions(ctx, func->express);
+	*result = func->result;
+	ctx->flag_returned = 0;
 	list_del(&func->used);
 	list_del(&vector.list);
-	return -EINVAL;
+	return ret;
 }
 
 %}
@@ -660,6 +678,7 @@ arguments:
 int main(int argc, char ** argv)
 {
 	struct context ctx = {0};
+	struct arith_express_result result;
 	int ret = 0;
 
 	yyparse();
@@ -673,7 +692,7 @@ int main(int argc, char ** argv)
 		return ret;
 	}
 
-	return do_call_function(&ctx, "main", NULL, 0);
+	return do_call_function(&ctx, "main", NULL, 0, &result);
 }
 
 void yyerror(char *s)
