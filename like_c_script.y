@@ -460,7 +460,7 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 			if (ret < 0) {
 				return ret;
 			}
-		} while (ctx->flag_returned);
+		} while (!ctx->flag_returned);
 		return 0;
 	} else if (!strcmp(express->operation, "if")) {
 		struct arith_express_result result;
