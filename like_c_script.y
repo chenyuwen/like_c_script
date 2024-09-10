@@ -7,8 +7,8 @@
 #include <errno.h>
 #include "gnu_list.h"
 
-#define YYDEBUG 1
-int yydebug = 1;
+//#define YYDEBUG 1
+//int yydebug = 1;
 int yylex();
 void yyerror(char *s);
 
@@ -82,7 +82,6 @@ struct expression *alloc_expression(const char *operation, const size_t argc, ..
 	}
 	memset(express, 0, sizeof(struct expression));
 
-	printf("%s: \n", operation);
 	va_start(args, argc);
 	for (i = 0; i < argc; i++) {
 		express->argv[i] = va_arg(args, void *);
@@ -176,7 +175,6 @@ int do_call_with_expression(struct context *ctx, struct expression *express,
 		argc++;
 	}
 
-	printf("%s %s size: %lu\n", __func__, express->operation, argc);
 	fargv = malloc(sizeof(struct arith_express_result) * argc);
 	if (fargv == NULL) {
 		return -ENOMEM;
@@ -185,7 +183,6 @@ int do_call_with_expression(struct context *ctx, struct expression *express,
 	for (next = express->argv[1]; next != NULL; next = next->argv[1]) {
 		struct arith_express_result *tmp = &fargv[i++];
 
-		printf("%s %s\n", __func__, next->operation);
 		ret = do_arithmetic_expression(ctx, next->argv[0], tmp);
 		if (ret < 0) {
 			free(fargv);
@@ -217,7 +214,6 @@ int do_cmp_expression(struct context *ctx, struct expression *express,
 		return ret;
 	}
 
-	printf("%s: %d\n", __func__, __LINE__);
 	if (!strcmp(cmp, "!=")) {
 		ret = (result1.intval != result2.intval);
 	} else if (!strcmp(cmp, "==")) {
@@ -231,7 +227,6 @@ int do_cmp_expression(struct context *ctx, struct expression *express,
 	} else if (!strcmp(cmp, "<=")) {
 		ret = (result1.intval <= result2.intval);
 	}
-	printf("%s: %d\n", __func__, __LINE__);
 
 	result->intval = ret;
 	return 0;
@@ -321,7 +316,6 @@ int do_data_type(struct expression *express, enum arith_express_type *type)
 {
 	const char *data_type = express->argv[0];
 
-	printf("OK %s: %s\n", express->operation, data_type);
 	if (!strcmp(data_type, "int")) {
 		return AE_TYPE_INT;
 	} else if (!strcmp(data_type, "float")) {
@@ -380,7 +374,6 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	func->arguments = express->argv[2];
 	func->fargc = 0;
 	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
-		printf("kk");
 		func->fargc++;
 	}
 
@@ -414,7 +407,6 @@ int do_declare_function(struct context *ctx, struct expression *express)
 int do_declare_variable_and_function(struct context *ctx, struct expression *express)
 {
 	struct expression *next = NULL;
-	printf("KK%s: \n", express->operation);
 
 	if (strcmp(express->operation, "declare_variable_and_function")) {
 		return -1;
@@ -439,8 +431,6 @@ int pretreat_root(struct context *ctx, struct expression *express)
 	}
 
 	for (next = express->argv[0]; next != NULL; next = next->argv[1]) {
-		printf("%s: \n", next->operation);
-
 		ret = do_declare_variable_and_function(ctx, next->argv[0]);
 		if (ret < 0) {
 			return ret;
@@ -530,7 +520,7 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 			return -EINVAL;
 		}
 		func->result = result;
-		printf("return OK %d\n", result.intval);
+		printf("return %d\n", result.intval);
 		return 0;
 	}
 	return 0;
