@@ -45,4 +45,8 @@ int arith_express_value_calculate1(struct arith_express_value *value,
 int arith_express_value_convert(struct arith_express_value *dest,
 	struct arith_express_value *src);
 
+void arith_express_value_print(const char *name, struct arith_express_value *value);
+
+int arith_express_value_equal(struct arith_express_value *value, int intval);
+
 #endif /*__ARITH_EXPRESS_VALUE_H__*/

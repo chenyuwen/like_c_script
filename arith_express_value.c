@@ -98,21 +98,27 @@ static int arith_express_value_calculate2_##__type(struct arith_express_value *r
 		break; \
 	case CAL2_OPT_EQUAL: \
 		result->__valuename = (result->__valuename == value->__valuename); \
+		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_NOT_EQUAL: \
 		result->__valuename = (result->__valuename != value->__valuename); \
+		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_LESS: \
 		result->__valuename = (result->__valuename < value->__valuename); \
+		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_LESS_EQUAL: \
 		result->__valuename = (result->__valuename <= value->__valuename); \
+		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_GREAT: \
 		result->__valuename = (result->__valuename > value->__valuename); \
+		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_GREAT_EQUAL: \
 		result->__valuename = (result->__valuename >= value->__valuename); \
+		result->type = AE_TYPE_INT; \
 		break; \
 	default: \
 		printf("Error %s: %d\n", __func__, __LINE__); \
@@ -128,6 +134,8 @@ static int arith_express_value_calculate2_float(struct arith_express_value *resu
 {
 	switch (opt) {
 	case '+':
+		printf("%f + %f = %f\n", result->floatval, value->floatval,
+			result->floatval + value->floatval);
 		result->floatval += arith_express_value_to_float(value);
 		break;
 	case '-':
@@ -218,6 +226,38 @@ int arith_express_value_convert(struct arith_express_value *dest,
 	default:
 		printf("Error %s: %d\n", __func__, __LINE__);
 		return -EINVAL;
+	}
+	return 0;
+}
+
+void arith_express_value_print(const char *name, struct arith_express_value *value)
+{
+	switch (value->type) {
+	case AE_TYPE_INT:
+	case AE_TYPE_VOLD:
+		printf("%s <%d> = %d\n", name, value->type, value->intval);
+		break;
+	case AE_TYPE_FLOAT:
+		printf("%s <%d> = %f\n", name, value->type, value->floatval);
+		break;
+	case AE_TYPE_CHAR:
+		printf("%s <%d> = %d\n", name, value->type, (int)value->charval);
+		break;
+	default:
+		printf("Error %s: %d\n", __func__, __LINE__);
+	}
+}
+
+int arith_express_value_equal(struct arith_express_value *value, int intval)
+{
+	switch (value->type) {
+	case AE_TYPE_INT:
+	case AE_TYPE_VOLD:
+		return (intval == value->intval);
+	case AE_TYPE_FLOAT:
+		return (intval == value->floatval);
+	case AE_TYPE_CHAR:
+		return (intval == value->charval);
 	}
 	return 0;
 }
