@@ -44,6 +44,7 @@ struct expression *alloc_expression(void);
 
 [0-9]+ {yylval.strval = strdup(yytext);return NUMBER;}
 0x[0-9a-fA-F]+ {yylval.strval = strdup(yytext); return NUMBER;}
+[0-9]+.[0-9]+ {yylval.strval = strdup(yytext); return NUMBER;}
 "#".* {}
 [ \t\n]  {}
 .  {printf("Mystery character:%c\n", *yytext);}

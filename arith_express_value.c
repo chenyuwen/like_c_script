@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include "expression.h"
 #include "arith_express_value.h"
@@ -31,6 +32,26 @@ int atith_express_value_init(struct arith_express_value *value,
 	} else {
 		printf("Error %s: %d\n", __func__, __LINE__);
 	}
+	return 0;
+}
+
+int atith_express_value_init_by_num(struct arith_express_value *value,
+	const char *number)
+{
+	int is_float = !!strchr(number, '.');
+
+	if (is_float) {
+		value->type = AE_TYPE_FLOAT;
+		value->floatval = strtof(number, NULL);
+		return 0;
+	}
+
+	value->type = AE_TYPE_INT;
+	if (!strncmp(number, "0x", 2)) {
+		value->intval = strtol(number, NULL, 16);
+		return 0;
+	}
+	value->intval = strtol(number, NULL, 10);
 	return 0;
 }
 

@@ -21,6 +21,9 @@ struct arith_express_value {
 int atith_express_value_init(struct arith_express_value *value,
 	struct expression *express);
 
+int atith_express_value_init_by_num(struct arith_express_value *value,
+	const char *number);
+
 int arith_express_value_calculate2(struct arith_express_value *result, const char opt,
 	struct arith_express_value *value);
 

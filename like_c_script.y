@@ -78,13 +78,7 @@ int do_number(struct expression *express, struct arith_express_value *result)
 {
 	const char *num = express->argv[0];
 
-	atith_express_value_init(result, NULL);
-	if (!strncmp(num, "0x", 2)) {
-		result->intval = strtol(num, NULL, 16);
-		return 0;
-	}
-	result->intval = strtol(num, NULL, 10);
-	return 0;
+	return atith_express_value_init_by_num(result, num);
 }
 
 struct variable *variable_find(struct context *ctx, const char *name)
