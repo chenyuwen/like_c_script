@@ -1,6 +1,6 @@
-test4: test4.l test4.y
-	bison -Wcounterexamples -d test4.y
-	flex test4.l
-	gcc -o $@ test4.tab.c lex.yy.c
+like_c_script: like_c_script.l like_c_script.y
+	bison -Wcounterexamples -d like_c_script.y
+	flex like_c_script.l
+	gcc -o $@ like_c_script.tab.c lex.yy.c
 clean:
-	rm -rf test4.tab.c lex.yy.c test4 test4.tab.h
+	rm -rf like_c_script.tab.c lex.yy.c like_c_script like_c_script.tab.h

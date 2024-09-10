@@ -1,7 +1,7 @@
 %option noyywrap
 %{
 #include <stdlib.h>
-#include "test4.tab.h"
+#include "like_c_script.tab.h"
 
 struct expression *alloc_expression(void);
 %}
