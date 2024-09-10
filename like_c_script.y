@@ -198,6 +198,45 @@ int do_call_with_expression(struct context *ctx, struct expression *express,
 	return ret;
 }
 
+int do_cmp_expression(struct context *ctx, struct expression *express,
+	struct arith_express_result *result)
+{
+	int ret = 0;
+	struct arith_express_result result1, result2;
+	const char *cmp = express->argv[1];
+
+	result1 = *result;
+	ret = do_arithmetic_expression(ctx, express->argv[0], &result1);
+	if (ret < 0) {
+		return ret;
+	}
+
+	result2 = *result;
+	ret = do_arithmetic_expression(ctx, express->argv[2], &result2);
+	if (ret < 0) {
+		return ret;
+	}
+
+	printf("%s: %d\n", __func__, __LINE__);
+	if (!strcmp(cmp, "!=")) {
+		ret = (result1.intval != result2.intval);
+	} else if (!strcmp(cmp, "==")) {
+		ret = (result1.intval == result2.intval);
+	} else if (!strcmp(cmp, "<")) {
+		ret = (result1.intval < result2.intval);
+	} else if (!strcmp(cmp, ">")) {
+		ret = (result1.intval > result2.intval);
+	} else if (!strcmp(cmp, ">=")) {
+		ret = (result1.intval >= result2.intval);
+	} else if (!strcmp(cmp, "<=")) {
+		ret = (result1.intval <= result2.intval);
+	}
+	printf("%s: %d\n", __func__, __LINE__);
+
+	result->intval = ret;
+	return 0;
+}
+
 int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	struct arith_express_result *result)
 {
@@ -240,6 +279,8 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 
 		*result = result1;
 		return ret;
+	} else if (!strcmp(express->operation, "cmp")) {
+		return do_cmp_expression(ctx, express, result);
 	}
 
 	result1 = *result;
@@ -564,11 +605,6 @@ int do_call_function(struct context *ctx, const char *fname,
 	int intval;
 }
 
-/*declare tokens */
-
-%token <strval> NUMBER
-%token <strval> SYMBOL
-
 %left '+' '-'
 %left '*' '/'
 %left '&'
@@ -585,7 +621,11 @@ int do_call_function(struct context *ctx, const char *fname,
 %type <express> variable_symbol variable_symbols
 %type <express> function_arguments declare_variable
 %type <express> root
-%token <intval> CMP
+
+/*declare tokens */
+%token <strval> CMP
+%token <strval> NUMBER
+%token <strval> SYMBOL
 %token IF WHILE RETURN
 %token DATA_TYPE_INT DATA_TYPE_FLOAT DATA_TYPE_VOLD DATA_TYPE_STRUCT
 
@@ -660,6 +700,7 @@ arithmetic_expression:
 	| arithmetic_expression '/' arithmetic_expression { $$ = alloc_expression("/", 2, $1, $3); }
 	| arithmetic_expression '&' arithmetic_expression { $$ = alloc_expression("&", 2, $1, $3); }
 	| arithmetic_expression '|' arithmetic_expression { $$ = alloc_expression("|", 2, $1, $3); }
+	| arithmetic_expression CMP arithmetic_expression { $$ = alloc_expression("cmp", 3, $1, $2, $3); }
 	| '|' arithmetic_expression '|' { $$ = alloc_expression("abs", 1, $2); }
 	| '(' arithmetic_expression ')' { $$ = alloc_expression("(", 1, $2); }
 	| '-' arithmetic_expression     { $$ = alloc_expression("invert", 1, $2); }

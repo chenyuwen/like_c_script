@@ -27,7 +27,7 @@ struct expression *alloc_expression(void);
 "<"  |
 ">"  |
 ">=" |
-"<=" { return CMP; }
+"<=" { yylval.strval = strdup(yytext); return CMP; }
 
 "if"    { return IF; }
 "while" { return WHILE; }
