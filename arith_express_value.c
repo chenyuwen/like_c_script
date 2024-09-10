@@ -28,8 +28,9 @@ int atith_express_value_init(struct arith_express_value *value,
 		value->charval = 0;
 	} else if (!strcmp(data_type, "vold")) {
 		value->type = AE_TYPE_VOLD;
+	} else {
+		printf("Error %s: %d\n", __func__, __LINE__);
 	}
-	printf("Error %s: %d\n", __func__, __LINE__); \
 	return 0;
 }
 
