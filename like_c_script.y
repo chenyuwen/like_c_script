@@ -48,15 +48,23 @@ struct variable_vector {
 
 struct function {
 	struct list_head list;
+	struct list_head used;
 	const char *name;
 	struct expression *retval;
 	struct expression *arguments;
 	struct expression *express;
+
+	size_t fargc;
+	struct variable *fargv;
+
+	struct list_head variable_vector_lists;
 };
 
 struct context {
-	struct list_head variable_vector_lists;
+	struct variable_vector variable_vector;
 	struct list_head function_lists;
+
+	struct list_head used_lists;
 };
 
 struct expression *alloc_expression(const char *operation, const size_t argc, ...)
@@ -99,12 +107,32 @@ struct variable *variable_find(struct context *ctx, const char *name)
 {
 	struct variable_vector *vector;
 	struct variable *pos = NULL;
+	struct function *func = NULL;
+	size_t i = 0;
 
-	list_for_each_entry(vector, &ctx->variable_vector_lists, list) {
-		list_for_each_entry(pos, &vector->variable_lists, list) {
+	if (!list_empty(&ctx->used_lists)) {
+		func = list_first_entry(&ctx->used_lists, struct function, used);
+
+		list_for_each_entry(vector, &func->variable_vector_lists, list) {
+			list_for_each_entry(pos, &vector->variable_lists, list) {
+				if (!strcmp(pos->name, name)) {
+					return pos;
+				}
+			}
+		}
+
+		for (i = 0; i < func->fargc; i++) {
+			pos = &(func->fargv[i]);
 			if (!strcmp(pos->name, name)) {
 				return pos;
 			}
+		}
+	}
+
+	vector = &ctx->variable_vector;
+	list_for_each_entry(pos, &vector->variable_lists, list) {
+		if (!strcmp(pos->name, name)) {
+			return pos;
 		}
 	}
 
@@ -113,11 +141,60 @@ struct variable *variable_find(struct context *ctx, const char *name)
 
 struct variable_vector *current_variable_vector(struct context *ctx)
 {
-	return list_first_entry(&ctx->variable_vector_lists,
+	struct function *func = NULL;
+	struct variable_vector *vector = NULL;
+
+	if (list_empty(&ctx->used_lists)) {
+		return &ctx->variable_vector;
+	}
+
+	func = list_first_entry(&ctx->used_lists, struct function, used);
+	vector = list_first_entry(&func->variable_vector_lists,
 		struct variable_vector, list);
+	return vector;
 }
 
-int do_call_function(struct context *ctx, const char *fname);
+int do_call_function(struct context *ctx, const char *fname,
+	struct arith_express_result *results, const size_t result_size);
+
+int do_arithmetic_expression(struct context *ctx, struct expression *express,
+	struct arith_express_result *result);
+
+int do_call_with_expression(struct context *ctx, struct expression *express)
+{
+	struct expression *next = NULL;
+	const char *fname = express->argv[0];
+	struct arith_express_result *result = NULL;
+	size_t argc = 0, i = 0;
+	int ret = 0;
+
+	for (next = express->argv[1]; next != NULL; next = next->argv[1]) {
+		argc++;
+	}
+
+	printf("%s %s size: %lu\n", __func__, express->operation, argc);
+	result = malloc(sizeof(struct arith_express_result) * argc);
+	if (result == NULL) {
+		return -ENOMEM;
+	}
+
+	for (next = express->argv[1]; next != NULL; next = next->argv[1]) {
+		struct arith_express_result *tmp = &result[i++];
+
+		printf("%s %s\n", __func__, next->operation);
+		ret = do_arithmetic_expression(ctx, next->argv[0], tmp);
+		if (ret < 0) {
+			free(result);
+			return ret;
+		}
+
+		printf("result: %d\n", tmp->intval);
+	}
+
+	ret = do_call_function(ctx, fname, result, argc);
+	free(result);
+	return ret;
+}
 
 int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	struct arith_express_result *result)
@@ -157,9 +234,7 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 		*result = var->result;
 		return 0;
 	} else if (!strcmp(express->operation, "call")) {
-		/*TODO*/
-		const char *fname = express->argv[0];
-		return do_call_function(ctx, fname);
+		return do_call_with_expression(ctx, express);
 	}
 
 	result1 = *result;
@@ -249,15 +324,41 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 int do_declare_function(struct context *ctx, struct expression *express)
 {
 	struct function *func = NULL;
+	struct expression *next = NULL;
+	int i = 0, ret = 0;
 
 	func = malloc(sizeof(struct function));
 	if (func == NULL) {
 		return -ENOMEM;
 	}
+	func->arguments = express->argv[2];
+	func->fargc = 0;
+	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
+		printf("kk");
+		func->fargc++;
+	}
+
+	func->fargv = malloc(sizeof(struct variable) * func->fargc);
+	if (func->fargv == NULL) {
+		free(func);
+		return -ENOMEM;
+	}
+
+	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
+		struct variable *var = &(func->fargv[i++]);
+
+		ret = do_data_type(next->argv[0], &var->result.type);
+		if (ret < 0) {
+			free(func->fargv);
+			free(func);
+			return ret;
+		}
+		var->name = next->argv[1];
+		printf("argument: %s\n", var->name);
+	}
 
 	func->name = express->argv[1];
 	func->retval = express->argv[0];
-	func->arguments = express->argv[2];
 	func->express = express->argv[3];
 	list_add(&func->list, &ctx->function_lists);
 	printf("FUNC name %s: \n", (const char *)express->argv[1]);
@@ -402,23 +503,38 @@ int do_expressions(struct context *ctx, struct expression *express)
 	return 0;
 }
 
-int do_call_function(struct context *ctx, const char *fname)
+int do_call_function(struct context *ctx, const char *fname,
+	struct arith_express_result *results, const size_t result_size)
 {
-	struct function *pos = NULL;
+	struct function *pos = NULL, *func = NULL;
 	struct variable_vector vector;
 	int ret = 0;
-
-	INIT_LIST_HEAD(&vector.variable_lists);
-	list_add_tail(&vector.list, &ctx->variable_vector_lists);
+	size_t i = 0;
 
 	list_for_each_entry(pos, &ctx->function_lists, list) {
 		if (!strcmp(pos->name, fname)) {
-			ret = do_expressions(ctx, pos->express);
-			/*TODO free*/
-			list_del(&vector.list);
-			return 0;
+			func = pos;
+			break;
 		}
 	}
+	if (func == NULL) {
+		return -EINVAL;
+	}
+
+	for (i = 0; i < func->fargc && i < result_size; i++) {
+		struct variable *variable = &func->fargv[i];
+
+		variable->result.intval = results[i].intval;
+	}
+
+	INIT_LIST_HEAD(&vector.variable_lists);
+	INIT_LIST_HEAD(&func->variable_vector_lists);
+	list_add_tail(&vector.list, &func->variable_vector_lists);
+
+	list_add(&func->used, &ctx->used_lists);
+	ret = do_expressions(ctx, func->express);
+	list_del(&func->used);
+	list_del(&vector.list);
 	return -EINVAL;
 }
 
@@ -499,7 +615,7 @@ declare_function:
 
 function_arguments:
 	  { $$ = NULL; }
-	| data_type SYMBOL { $$ = alloc_expression("function_arguments", 2, $1, $2); }
+	| data_type SYMBOL { $$ = alloc_expression("function_arguments", 3, $1, $2, NULL); }
 	| data_type SYMBOL ',' function_arguments { $$ = alloc_expression("function_arguments", 3, $1, $2, $4); }
 	;
 
@@ -536,7 +652,7 @@ arithmetic_expression:
 
 arguments:
 	  { $$ = NULL; }
-	| arithmetic_expression { $$ = alloc_expression("arguments", 1, $1); }
+	| arithmetic_expression { $$ = alloc_expression("arguments", 2, $1, NULL); }
 	| arithmetic_expression ',' arguments { $$ = alloc_expression("arguments", 2, $1, $3); }
 	;
 %%
@@ -544,23 +660,20 @@ arguments:
 int main(int argc, char ** argv)
 {
 	struct context ctx = {0};
-	struct variable_vector vector;
 	int ret = 0;
 
 	yyparse();
 
-	INIT_LIST_HEAD(&ctx.variable_vector_lists);
+	INIT_LIST_HEAD(&ctx.variable_vector.variable_lists);
 	INIT_LIST_HEAD(&ctx.function_lists);
-
-	INIT_LIST_HEAD(&vector.variable_lists);
-	list_add_tail(&vector.list, &ctx.variable_vector_lists);
+	INIT_LIST_HEAD(&ctx.used_lists);
 
 	ret = pretreat_root(&ctx, root);
 	if (ret < 0) {
 		return ret;
 	}
 
-	return do_call_function(&ctx, "main");
+	return do_call_function(&ctx, "main", NULL, 0);
 }
 
 void yyerror(char *s)
