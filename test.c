@@ -1,12 +1,27 @@
 
-int k = 0, ff=33 + 34, ffk;
-int bb=ff;
+int k = 0, ff=35 + 34, ffk;
+int bb=333;
 int main(int argc, int argv)
 {
-	int k = 0;
-	k = 332;
-	while (1) {int a=0;return a;}
-	return a;
+	int k = 0, i = 100;
+	k = (332);
+	33+33;
+	if (k) {
+		k=k-1;
+	}
+
+	if (k) {
+		k=100;
+	}
+
+	k = 222;
+	while (k) {
+		k = k - 1;
+		i = i + 3;
+	}
+	func3();
+	k = (222) * (33-2);
+	return ff;
 	return b;
 }
 
@@ -17,17 +32,8 @@ int func2(int argc)
 
 void func3()
 {
-	if (33) {
-		while (1) {}
-	}
-
-	func3();
-	func3(44);
-	func4(ab, 33);
-
-	while (a=4 + 44) {
-		if (f) {
-		}
-	}
+	int i = 0;
+	i = 100;
+	return 0;
 }
 

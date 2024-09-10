@@ -41,8 +41,21 @@ struct variable {
 	struct arith_express_result result;
 };
 
-struct context {
+struct variable_vector {
 	struct list_head variable_lists;
+	struct list_head list;
+};
+
+struct function {
+	struct list_head list;
+	const char *name;
+	struct expression *retval;
+	struct expression *arguments;
+	struct expression *express;
+};
+
+struct context {
+	struct list_head variable_vector_lists;
 	struct list_head function_lists;
 };
 
@@ -82,22 +95,29 @@ int do_number(struct expression *express, struct arith_express_result *result)
 	return 0;
 }
 
-int do_symbol_var(struct context *ctx, struct list_head *local_variables,
-	struct expression *express, struct arith_express_result *result)
+struct variable *variable_find(struct context *ctx, const char *name)
 {
+	struct variable_vector *vector;
 	struct variable *pos = NULL;
-	const char *varname = express->argv[0];
 
-	list_for_each_entry(pos, &ctx->variable_lists, list) {
-		if (!strcmp(pos->name, varname)) {
-			*result = pos->result;
-			return 0;
+	list_for_each_entry(vector, &ctx->variable_vector_lists, list) {
+		list_for_each_entry(pos, &vector->variable_lists, list) {
+			if (!strcmp(pos->name, name)) {
+				return pos;
+			}
 		}
 	}
 
-	/* local variable */
-	return -EINVAL;
+	return NULL;
 }
+
+struct variable_vector *current_variable_vector(struct context *ctx)
+{
+	return list_first_entry(&ctx->variable_vector_lists,
+		struct variable_vector, list);
+}
+
+int do_call_function(struct context *ctx, const char *fname);
 
 int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	struct arith_express_result *result)
@@ -105,16 +125,55 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	struct arith_express_result result1, result2;
 	int ret = 0;
 
-	if (!strcmp(express->operation, "number")) {
+	if (!strcmp(express->operation, "abs")) {
+		ret = do_arithmetic_expression(ctx, express->argv[0], result);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (result->intval < 0) {
+			result->intval = -result->intval;
+		}
+		return 0;
+	} else if (!strcmp(express->operation, "(")) {
+		return do_arithmetic_expression(ctx, express->argv[0], result);
+	} else if (!strcmp(express->operation, "invert")) {
+		result1 = *result;
+		ret = do_arithmetic_expression(ctx, express->argv[0], &result1);
+		if (ret < 0) {
+			return ret;
+		}
+		result->intval = -result1.intval; /*TODO*/
+		return 0;
+	} else if (!strcmp(express->operation, "number")) {
 		return do_number(express, result);
 	} else if (!strcmp(express->operation, "symbol")) {
-		return do_symbol_var(ctx, NULL, express, result);
+		struct variable *var = NULL;
+		var = variable_find(ctx, express->argv[0]);
+		if (var == NULL) {
+			return -EINVAL;
+		}
+
+		*result = var->result;
+		return 0;
+	} else if (!strcmp(express->operation, "call")) {
+		/*TODO*/
+		const char *fname = express->argv[0];
+		return do_call_function(ctx, fname);
 	}
 
 	result1 = *result;
-	result2 = *result;
 	ret = do_arithmetic_expression(ctx, express->argv[0], &result1);
+	if (ret < 0) {
+		return ret;
+	}
+
+	result2 = *result;
 	ret = do_arithmetic_expression(ctx, express->argv[1], &result2);
+	if (ret < 0) {
+		return ret;
+	}
+
 	if (!strcmp(express->operation, "+")) {
 		result->intval = result1.intval + result2.intval;
 		return 0;
@@ -181,15 +240,26 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 				return ret;
 			}
 		}
-		list_add(&var->list, &ctx->variable_lists);
+		list_add(&var->list, &current_variable_vector(ctx)->variable_lists);
 		printf("%s = %d\n", (const char *)var->name, var->result.intval);
 	}
 	return 0;
 }
 
-int do_declare_function(struct expression *express)
+int do_declare_function(struct context *ctx, struct expression *express)
 {
-	printf("FUNC %s: \n", express->operation);
+	struct function *func = NULL;
+
+	func = malloc(sizeof(struct function));
+	if (func == NULL) {
+		return -ENOMEM;
+	}
+
+	func->name = express->argv[1];
+	func->retval = express->argv[0];
+	func->arguments = express->argv[2];
+	func->express = express->argv[3];
+	list_add(&func->list, &ctx->function_lists);
 	printf("FUNC name %s: \n", (const char *)express->argv[1]);
 	return 0;
 }
@@ -205,14 +275,14 @@ int do_declare_variable_and_function(struct context *ctx, struct expression *exp
 	next = express->argv[0];
 
 	if (!strcmp(next->operation, "declare_function")) {
-		return do_declare_function(next);
-	} else if (!strcmp(next->operation, "declare_varible")) {
+		return do_declare_function(ctx, next);
+	} else if (!strcmp(next->operation, "declare_variable")) {
 		return do_declare_variable(ctx, next);
 	}
 	return 0;
 }
 
-int do_root(struct context *ctx, struct expression *express)
+int pretreat_root(struct context *ctx, struct expression *express)
 {
 	struct expression *next = NULL;
 	int ret = 0;
@@ -230,6 +300,126 @@ int do_root(struct context *ctx, struct expression *express)
 		}
 	}
 	return 0;
+}
+
+int __do_symbol_equal(struct context *ctx, struct expression *express)
+{
+	struct variable *var = NULL;
+	struct arith_express_result result;
+	const char *varname = express->argv[0];
+	int ret = 0;
+
+	var = variable_find(ctx, varname);
+	if (var == NULL) {
+		return -EINVAL;
+	}
+
+	ret = do_arithmetic_expression(ctx, express->argv[1], &var->result);
+	if (ret < 0) {
+		return ret;
+	}
+	printf("varname: %s = %d\n", varname, var->result.intval);
+	return 0;
+}
+
+int do_expressions(struct context *ctx, struct expression *express);
+
+int do_logical_expression(struct context *ctx, struct expression *express)
+{
+	int ret = 0;
+
+	printf("do %s\n", express->operation);
+	if (!strcmp(express->operation, "declare_variable")) {
+		return do_declare_variable(ctx, express->argv[0]);
+	} else if (!strcmp(express->operation, "expression")) {
+		struct arith_express_result result;
+
+		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
+		if (ret < 0) {
+			return ret;
+		}
+		return 0;
+	} else if (!strcmp(express->operation, "=")) {
+		return __do_symbol_equal(ctx, express);
+	} else if (!strcmp(express->operation, "while")) {
+		struct arith_express_result result;
+
+		do {
+			ret = do_arithmetic_expression(ctx, express->argv[0], &result);
+			if (ret < 0 || result.intval == 0) {
+				return ret;
+			}
+
+			ret = do_expressions(ctx, express->argv[1]);
+			if (ret < 0) {
+				return ret;
+			}
+		} while (1);
+		return 0;
+	} else if (!strcmp(express->operation, "if")) {
+		struct arith_express_result result;
+
+		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (result.intval != 0) {
+			return do_expressions(ctx, express->argv[1]);
+		}
+		return 0;
+	} else if (!strcmp(express->operation, "return")) {
+		struct arith_express_result result;
+
+		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
+		printf("return kk %d\n", result.intval);
+		if (ret < 0) {
+			printf("return  kkk %d\n", result.intval);
+			return ret;
+		}
+
+		printf("return OK %d\n", result.intval);
+		return 0;
+	}
+	return 0;
+}
+
+int do_expressions(struct context *ctx, struct expression *express)
+{
+	struct expression *next = NULL;
+	int ret = 0;
+
+	if (express == NULL) {
+		return 0;
+	}
+
+	for (next = express; next != NULL; next = next->argv[1]) {
+		ret = do_logical_expression(ctx, next->argv[0]);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+	return 0;
+}
+
+int do_call_function(struct context *ctx, const char *fname)
+{
+	struct function *pos = NULL;
+	struct variable_vector vector;
+	int ret = 0;
+
+	INIT_LIST_HEAD(&vector.variable_lists);
+	list_add_tail(&vector.list, &ctx->variable_vector_lists);
+
+	list_for_each_entry(pos, &ctx->function_lists, list) {
+		if (!strcmp(pos->name, fname)) {
+			ret = do_expressions(ctx, pos->express);
+			/*TODO free*/
+			list_del(&vector.list);
+			return 0;
+		}
+	}
+	return -EINVAL;
 }
 
 %}
@@ -258,8 +448,8 @@ int do_root(struct context *ctx, struct expression *express)
 %type <express> arithmetic_expression arguments expressions one_exp
 %type <express> declare_variable_and_function declare_variable_and_functions
 %type <express> data_type declare_function
-%type <express> varible_symbol varible_symbols
-%type <express> function_arguments declare_varible
+%type <express> variable_symbol variable_symbols
+%type <express> function_arguments declare_variable
 %type <express> root
 %token <intval> CMP
 %token IF WHILE RETURN
@@ -277,22 +467,22 @@ declare_variable_and_functions:
 	;
 
 declare_variable_and_function:
-	  declare_varible ';' { $$ = alloc_expression("declare_variable_and_function", 1, $1); }
+	  declare_variable ';' { $$ = alloc_expression("declare_variable_and_function", 1, $1); }
 	| declare_function { $$ = alloc_expression("declare_variable_and_function", 1, $1); }
 	;
 
-declare_varible:
-	  data_type varible_symbols { $$ = alloc_expression("declare_varible", 2, $1, $2); }
+declare_variable:
+	  data_type variable_symbols { $$ = alloc_expression("declare_variable", 2, $1, $2); }
 	;
 
-varible_symbols:
-	  varible_symbol { $$= alloc_expression("varible_symbols", 2, $1, NULL); }
-	| varible_symbol ',' varible_symbols { $$= alloc_expression("varible_symbols", 2, $1, $3); }
+variable_symbols:
+	  variable_symbol { $$= alloc_expression("variable_symbols", 2, $1, NULL); }
+	| variable_symbol ',' variable_symbols { $$= alloc_expression("variable_symbols", 2, $1, $3); }
 	;
 
-varible_symbol:
-	  SYMBOL { $$= alloc_expression("varible_symbol", 1, $1); }
-	| SYMBOL '=' arithmetic_expression { $$= alloc_expression("varible_symbol", 2, $1, $3); }
+variable_symbol:
+	  SYMBOL { $$= alloc_expression("variable_symbol", 1, $1); }
+	| SYMBOL '=' arithmetic_expression { $$= alloc_expression("variable_symbol", 2, $1, $3); }
 	;
 
 data_type:
@@ -319,10 +509,11 @@ expressions:
 	;
 
 one_exp:
-	  arithmetic_expression ';' { $$ = alloc_expression("one_exp", 1, $1); }
-	| declare_varible ';' { $$ = alloc_expression("declare_variable", 0); }
+	  arithmetic_expression ';' { $$ = alloc_expression("expression", 1, $1); }
+	| declare_variable ';' { $$ = alloc_expression("declare_variable", 1, $1); }
+	| SYMBOL '=' arithmetic_expression ';' { $$ = alloc_expression("=", 2, $1, $3); }
 	| RETURN arithmetic_expression ';' { $$ = alloc_expression("return", 1, $2); }
-	| WHILE '(' arithmetic_expression ')' '{' expressions '}' { $$ = alloc_expression("if", 2, $3, $6);}
+	| WHILE '(' arithmetic_expression ')' '{' expressions '}' { $$ = alloc_expression("while", 2, $3, $6);}
 	| WHILE '(' arithmetic_expression ')' '{' '}' { $$ = alloc_expression("while", 2, $3, NULL); }
 	| IF '(' arithmetic_expression ')' '{' expressions '}' { $$ = alloc_expression("if", 2, $3, $6); }
 	| IF '(' arithmetic_expression ')' '{' '}' { $$ = alloc_expression("if", 2, $3, NULL); }
@@ -335,13 +526,12 @@ arithmetic_expression:
 	| arithmetic_expression '/' arithmetic_expression { $$ = alloc_expression("/", 2, $1, $3); }
 	| arithmetic_expression '&' arithmetic_expression { $$ = alloc_expression("&", 2, $1, $3); }
 	| arithmetic_expression '|' arithmetic_expression { $$ = alloc_expression("|", 2, $1, $3); }
-	| '|' arithmetic_expression '|' { $$ = alloc_expression("|", 1, $2); }
+	| '|' arithmetic_expression '|' { $$ = alloc_expression("abs", 1, $2); }
 	| '(' arithmetic_expression ')' { $$ = alloc_expression("(", 1, $2); }
-	| '-' arithmetic_expression     { $$ = alloc_expression("-", 1, $2); }
+	| '-' arithmetic_expression     { $$ = alloc_expression("invert", 1, $2); }
 	| NUMBER      { $$ = alloc_expression("number", 1, $1); }
 	| SYMBOL      { $$ = alloc_expression("symbol", 1, $1); }
 	| SYMBOL '(' arguments ')' { $$ = alloc_expression("call", 2, $1, $3); }
-	| SYMBOL '=' arithmetic_expression { $$ = alloc_expression("=", 2, $1, $3); }
 	;
 
 arguments:
@@ -354,12 +544,23 @@ arguments:
 int main(int argc, char ** argv)
 {
 	struct context ctx = {0};
+	struct variable_vector vector;
+	int ret = 0;
 
 	yyparse();
 
-	INIT_LIST_HEAD(&ctx.variable_lists);
+	INIT_LIST_HEAD(&ctx.variable_vector_lists);
 	INIT_LIST_HEAD(&ctx.function_lists);
-	do_root(&ctx, root);
+
+	INIT_LIST_HEAD(&vector.variable_lists);
+	list_add_tail(&vector.list, &ctx.variable_vector_lists);
+
+	ret = pretreat_root(&ctx, root);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return do_call_function(&ctx, "main");
 }
 
 void yyerror(char *s)
