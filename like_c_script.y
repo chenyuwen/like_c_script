@@ -5,6 +5,9 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <errno.h>
+
+#include "expression.h"
+#include "arith_express_value.h"
 #include "gnu_list.h"
 
 //#define YYDEBUG 1
@@ -12,28 +15,7 @@
 int yylex();
 void yyerror(char *s);
 
-#define EXPRESSION_ARGV_MAX (5)
-struct expression {
-	const char *operation;
-
-	size_t argc;
-	void *argv[EXPRESSION_ARGV_MAX];
-};
 struct expression *root = NULL;
-
-enum arith_express_type {
-	AE_TYPE_INT,
-	AE_TYPE_FLOAT,
-};
-
-struct arith_express_value {
-	enum arith_express_type type;
-
-	union {
-		int intval;
-		float floatval;
-	};
-};
 
 struct variable {
 	struct list_head list;
@@ -96,6 +78,7 @@ int do_number(struct expression *express, struct arith_express_value *result)
 {
 	const char *num = express->argv[0];
 
+	atith_express_value_init(result, NULL);
 	if (!strncmp(num, "0x", 2)) {
 		result->intval = strtol(num, NULL, 16);
 		return 0;
@@ -202,13 +185,14 @@ int do_cmp_expression(struct context *ctx, struct expression *express,
 	struct arith_express_value arg1, arg2;
 	const char *cmp = express->argv[1];
 
-	arg1 = *result;
+	atith_express_value_init(&arg1, NULL);
+	atith_express_value_init(&arg2, NULL);
+
 	ret = do_arithmetic_expression(ctx, express->argv[0], &arg1);
 	if (ret < 0) {
 		return ret;
 	}
 
-	arg2 = *result;
 	ret = do_arithmetic_expression(ctx, express->argv[2], &arg2);
 	if (ret < 0) {
 		return ret;
@@ -238,26 +222,23 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	struct arith_express_value arg1, arg2;
 	int ret = 0;
 
+	atith_express_value_init(&arg1, NULL);
+	atith_express_value_init(&arg2, NULL);
+
 	if (!strcmp(express->operation, "abs")) {
 		ret = do_arithmetic_expression(ctx, express->argv[0], result);
 		if (ret < 0) {
 			return ret;
 		}
-
-		if (result->intval < 0) {
-			result->intval = -result->intval;
-		}
-		return 0;
+		return arith_express_value_calculate1(result, CAL1_OPT_ABS);
 	} else if (!strcmp(express->operation, "(")) {
 		return do_arithmetic_expression(ctx, express->argv[0], result);
 	} else if (!strcmp(express->operation, "invert")) {
-		arg1 = *result;
-		ret = do_arithmetic_expression(ctx, express->argv[0], &arg1);
+		ret = do_arithmetic_expression(ctx, express->argv[0], result);
 		if (ret < 0) {
 			return ret;
 		}
-		result->intval = -arg1.intval; /*TODO*/
-		return 0;
+		return arith_express_value_calculate1(result, CAL1_OPT_INVERT);
 	} else if (!strcmp(express->operation, "number")) {
 		return do_number(express, result);
 	} else if (!strcmp(express->operation, "symbol")) {
@@ -278,13 +259,11 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 		return do_cmp_expression(ctx, express, result);
 	}
 
-	arg1 = *result;
 	ret = do_arithmetic_expression(ctx, express->argv[0], &arg1);
 	if (ret < 0) {
 		return ret;
 	}
 
-	arg2 = *result;
 	ret = do_arithmetic_expression(ctx, express->argv[1], &arg2);
 	if (ret < 0) {
 		return ret;
@@ -292,6 +271,13 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 
 	if (!strcmp(express->operation, "+")) {
 		result->intval = arg1.intval + arg2.intval;
+		arith_express_value_calculate2(&arg1, express->operation[0], &arg2);
+		if (ret < 0) {
+			return ret;
+		}
+		arith_express_value_convert(result, &arg1);
+
+		//return arith_express_value_convert(result, &arg1);
 		return 0;
 	} else if (!strcmp(express->operation, "-")) {
 		result->intval = arg1.intval - arg2.intval;
@@ -302,39 +288,21 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	} else if (!strcmp(express->operation, "/")) {
 		result->intval = arg1.intval * arg2.intval;
 		return 0;
-	} else if (!strcmp(express->operation, "&")) {
-		result->intval = arg1.intval & arg2.intval;
+	} else if (!strcmp(express->operation, "|")) {
+		result->intval = arg1.intval | arg2.intval;
 		return 0;
 	} else if (!strcmp(express->operation, "&")) {
 		result->intval = arg1.intval & arg2.intval;
 		return 0;
-	}
-	return 0;
-}
-
-int do_data_type(struct expression *express, enum arith_express_type *type)
-{
-	const char *data_type = express->argv[0];
-
-	if (!strcmp(data_type, "int")) {
-		return AE_TYPE_INT;
-	} else if (!strcmp(data_type, "float")) {
-		return AE_TYPE_FLOAT;
 	}
 	return 0;
 }
 
 int do_declare_variable(struct context *ctx, struct expression *express)
 {
-	enum arith_express_type type;
 	struct expression *next = NULL;
 	struct variable *var = NULL;
 	int ret = 0;
-
-	ret = do_data_type(express->argv[0], &type);
-	if (ret < 0) {
-		return ret;
-	}
 
 	for (next = express->argv[1]; next != NULL; next = next->argv[1]) {
 		struct expression *var_exp = next->argv[0];
@@ -345,8 +313,12 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 		}
 
 		var->name = var_exp->argv[0];
-		var->value.type = type;
-		var->value.intval = 0;
+		ret = atith_express_value_init(&var->value, express->argv[0]);
+		if (ret < 0) {
+			free(var);
+			return ret;
+		}
+
 		if (var_exp->argv[1] != NULL) {
 			ret = do_arithmetic_expression(ctx, var_exp->argv[1],
 				&var->value);
@@ -371,6 +343,15 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	if (func == NULL) {
 		return -ENOMEM;
 	}
+
+	func->retval = express->argv[0];
+	ret = atith_express_value_init(&func->return_value, express->argv[0]);
+	if (ret < 0) {
+		free(func->fargv);
+		free(func);
+		return ret;
+	}
+
 	func->arguments = express->argv[2];
 	func->fargc = 0;
 	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
@@ -386,7 +367,7 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
 		struct variable *var = &(func->fargv[i++]);
 
-		ret = do_data_type(next->argv[0], &var->value.type);
+		ret = atith_express_value_init(&var->value, next->argv[0]);
 		if (ret < 0) {
 			free(func->fargv);
 			free(func);
@@ -397,7 +378,6 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	}
 
 	func->name = express->argv[1];
-	func->retval = express->argv[0];
 	func->express = express->argv[3];
 	list_add(&func->list, &ctx->function_lists);
 	printf("FUNC name %s: \n", (const char *)express->argv[1]);
@@ -442,7 +422,6 @@ int pretreat_root(struct context *ctx, struct expression *express)
 int __do_symbol_equal(struct context *ctx, struct expression *express)
 {
 	struct variable *var = NULL;
-	struct arith_express_value result;
 	const char *varname = express->argv[0];
 	int ret = 0;
 
@@ -463,14 +442,14 @@ int do_expressions(struct context *ctx, struct expression *express);
 
 int do_logical_expression(struct context *ctx, struct expression *express)
 {
+	struct arith_express_value result;
 	int ret = 0;
 
 	printf("do %s\n", express->operation);
+	atith_express_value_init(&result, NULL);
 	if (!strcmp(express->operation, "declare_variable")) {
 		return do_declare_variable(ctx, express->argv[0]);
 	} else if (!strcmp(express->operation, "expression")) {
-		struct arith_express_value result;
-
 		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
 		if (ret < 0) {
 			return ret;
@@ -479,8 +458,6 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 	} else if (!strcmp(express->operation, "=")) {
 		return __do_symbol_equal(ctx, express);
 	} else if (!strcmp(express->operation, "while")) {
-		struct arith_express_value result;
-
 		do {
 			ret = do_arithmetic_expression(ctx, express->argv[0], &result);
 			if (ret < 0 || result.intval == 0) {
@@ -494,8 +471,6 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 		} while (!ctx->flag_returned);
 		return 0;
 	} else if (!strcmp(express->operation, "if")) {
-		struct arith_express_value result;
-
 		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
 		if (ret < 0) {
 			return ret;
@@ -506,7 +481,6 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 		}
 		return 0;
 	} else if (!strcmp(express->operation, "return")) {
-		struct arith_express_value result;
 		struct function *func = NULL;
 
 		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
@@ -618,6 +592,7 @@ int do_call_function(struct context *ctx, const char *fname,
 %token <strval> SYMBOL
 %token IF WHILE RETURN
 %token DATA_TYPE_INT DATA_TYPE_FLOAT DATA_TYPE_VOLD DATA_TYPE_STRUCT
+%token DATA_TYPE_CHAR
 
 %%
 
@@ -723,6 +698,7 @@ int main(int argc, char ** argv)
 		return ret;
 	}
 
+	atith_express_value_init(&result, NULL);
 	return do_call_function(&ctx, "main", NULL, 0, &result);
 }
 

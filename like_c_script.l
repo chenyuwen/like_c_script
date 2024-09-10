@@ -33,6 +33,7 @@ struct expression *alloc_expression(void);
 "while" { return WHILE; }
 "return" { return RETURN; }
 "int" { return DATA_TYPE_INT; }
+"char" { return DATA_TYPE_CHAR; }
 "float" { return DATA_TYPE_FLOAT; }
 "void" { return DATA_TYPE_VOLD; }
 "struct" { return DATA_TYPE_STRUCT; }
