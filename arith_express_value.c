@@ -75,7 +75,7 @@ ARITH_EXPRESS_VALUE_TO(char);
 
 #define ARITH_EXPRESE_VALUE_CALCULATE2(__type, __valuename) \
 static int arith_express_value_calculate2_##__type(struct arith_express_value *result, \
-	const char opt, struct arith_express_value *value) \
+	const int opt, struct arith_express_value *value) \
 { \
 	switch (opt) { \
 	case '+': \
@@ -96,6 +96,24 @@ static int arith_express_value_calculate2_##__type(struct arith_express_value *r
 	case '|': \
 		result->__valuename |= arith_express_value_to_##__type(value); \
 		break; \
+	case CAL2_OPT_EQUAL: \
+		result->__valuename = (result->__valuename == value->__valuename); \
+		break; \
+	case CAL2_OPT_NOT_EQUAL: \
+		result->__valuename = (result->__valuename != value->__valuename); \
+		break; \
+	case CAL2_OPT_LESS: \
+		result->__valuename = (result->__valuename < value->__valuename); \
+		break; \
+	case CAL2_OPT_LESS_EQUAL: \
+		result->__valuename = (result->__valuename <= value->__valuename); \
+		break; \
+	case CAL2_OPT_GREAT: \
+		result->__valuename = (result->__valuename > value->__valuename); \
+		break; \
+	case CAL2_OPT_GREAT_EQUAL: \
+		result->__valuename = (result->__valuename >= value->__valuename); \
+		break; \
 	default: \
 		printf("Error %s: %d\n", __func__, __LINE__); \
 		return -EINVAL; \
@@ -106,7 +124,7 @@ ARITH_EXPRESE_VALUE_CALCULATE2(int, intval);
 ARITH_EXPRESE_VALUE_CALCULATE2(char, charval);
 
 static int arith_express_value_calculate2_float(struct arith_express_value *result,
-	const char opt, struct arith_express_value *value)
+	const int opt, struct arith_express_value *value)
 {
 	switch (opt) {
 	case '+':
@@ -128,7 +146,7 @@ static int arith_express_value_calculate2_float(struct arith_express_value *resu
 	return 0;
 }
 
-int arith_express_value_calculate2(struct arith_express_value *result, const char opt,
+int arith_express_value_calculate2(struct arith_express_value *result, const int opt,
 	struct arith_express_value *value)
 {
 	switch (result->type) {

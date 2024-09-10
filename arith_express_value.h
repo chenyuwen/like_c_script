@@ -24,7 +24,14 @@ int atith_express_value_init(struct arith_express_value *value,
 int atith_express_value_init_by_num(struct arith_express_value *value,
 	const char *number);
 
-int arith_express_value_calculate2(struct arith_express_value *result, const char opt,
+#define CAL2_OPT_EQUAL 1000
+#define CAL2_OPT_NOT_EQUAL 1001
+#define CAL2_OPT_LESS_EQUAL 1002
+#define CAL2_OPT_LESS 1003
+#define CAL2_OPT_GREAT_EQUAL 1004
+#define CAL2_OPT_GREAT 1005
+
+int arith_express_value_calculate2(struct arith_express_value *result, const int opt,
 	struct arith_express_value *value);
 
 enum cal1_opt {

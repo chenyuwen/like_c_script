@@ -193,17 +193,17 @@ int do_cmp_expression(struct context *ctx, struct expression *express,
 	}
 
 	if (!strcmp(cmp, "!=")) {
-		ret = (arg1.intval != arg2.intval);
+		ret = arith_express_value_calculate2(&arg1, CAL2_OPT_NOT_EQUAL, &arg2);
 	} else if (!strcmp(cmp, "==")) {
-		ret = (arg1.intval == arg2.intval);
+		ret = arith_express_value_calculate2(&arg1, CAL2_OPT_EQUAL, &arg2);
 	} else if (!strcmp(cmp, "<")) {
-		ret = (arg1.intval < arg2.intval);
+		ret = arith_express_value_calculate2(&arg1, CAL2_OPT_LESS, &arg2);
 	} else if (!strcmp(cmp, ">")) {
-		ret = (arg1.intval > arg2.intval);
+		ret = arith_express_value_calculate2(&arg1, CAL2_OPT_GREAT, &arg2);
 	} else if (!strcmp(cmp, ">=")) {
-		ret = (arg1.intval >= arg2.intval);
+		ret = arith_express_value_calculate2(&arg1, CAL2_OPT_GREAT_EQUAL, &arg2);
 	} else if (!strcmp(cmp, "<=")) {
-		ret = (arg1.intval <= arg2.intval);
+		ret = arith_express_value_calculate2(&arg1, CAL2_OPT_LESS_EQUAL, &arg2);
 	}
 
 	result->intval = ret;
@@ -538,7 +538,10 @@ int do_call_function(struct context *ctx, const char *fname,
 	for (i = 0; i < func->fargc && i < result_size; i++) {
 		struct variable *var = &func->fargv[i];
 
-		var->value.intval = results[i].intval;
+		ret = arith_express_value_convert(&var->value, &results[i]);
+		if (ret < 0) {
+			return ret;
+		}
 	}
 
 	INIT_LIST_HEAD(&vector.variable_lists);
@@ -560,7 +563,6 @@ int do_call_function(struct context *ctx, const char *fname,
 %union {
 	struct expression *express;
 	char *strval;
-	int intval;
 }
 
 %left '+' '-'
