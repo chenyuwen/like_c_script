@@ -243,14 +243,16 @@ void arith_express_value_print(const char *name, struct arith_express_value *val
 {
 	switch (value->type) {
 	case AE_TYPE_INT:
+		printf("%s <%s> = %d\n", name, "int", value->intval);
+		break;
 	case AE_TYPE_VOLD:
-		printf("%s <%d> = %d\n", name, value->type, value->intval);
+		printf("%s <%s> = %d\n", name, "vold", value->intval);
 		break;
 	case AE_TYPE_FLOAT:
-		printf("%s <%d> = %f\n", name, value->type, value->floatval);
+		printf("%s <%s> = %f\n", name, "float", value->floatval);
 		break;
 	case AE_TYPE_CHAR:
-		printf("%s <%d> = %d\n", name, value->type, (int)value->charval);
+		printf("%s <%s> = %d\n", name, "char", (int)value->charval);
 		break;
 	default:
 		printf("Error %s: %d\n", __func__, __LINE__);

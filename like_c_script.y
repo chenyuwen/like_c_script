@@ -354,6 +354,7 @@ int do_declare_function(struct context *ctx, struct expression *express)
 		return -ENOMEM;
 	}
 
+	printf("FUNC: %s \n", TO_STRING(express->argv[1]));
 	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
 		struct variable *var = &(func->fargv[i++]);
 
@@ -364,13 +365,12 @@ int do_declare_function(struct context *ctx, struct expression *express)
 			return ret;
 		}
 		var->name = TO_STRING(next->argv[1]);
-		printf("argument: %s\n", var->name);
+		printf("ARG: %s\n", var->name);
 	}
 
 	func->name = TO_STRING(express->argv[1]);
 	func->express = express->argv[3];
 	list_add(&func->list, &ctx->function_lists);
-	printf("FUNC name %s: \n", TO_STRING(express->argv[1]));
 	return 0;
 }
 
