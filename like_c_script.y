@@ -30,7 +30,6 @@ struct variable_vector {
 
 struct function {
 	struct list_head list;
-	struct list_head used;
 	const char *name;
 	struct expression *retval;
 	struct expression *arguments;
@@ -38,9 +37,18 @@ struct function {
 
 	size_t fargc;
 	struct variable *fargv;
-	struct arith_express_value return_value;
+	struct arith_express_value freturn_value;
+};
 
+struct function_runtime {
+	struct list_head list;
+	struct function *func;
+
+	struct arith_express_value return_value;
 	struct list_head variable_vector_lists;
+
+	size_t argc;
+	struct variable argv[1];
 };
 
 struct context {
@@ -85,13 +93,14 @@ struct variable *variable_find(struct context *ctx, const char *name)
 {
 	struct variable_vector *vector;
 	struct variable *pos = NULL;
-	struct function *func = NULL;
+	struct function_runtime *runtime = NULL;
 	size_t i = 0;
 
 	if (!list_empty(&ctx->used_lists)) {
-		func = list_first_entry(&ctx->used_lists, struct function, used);
+		runtime = list_first_entry(&ctx->used_lists,
+			struct function_runtime, list);
 
-		list_for_each_entry(vector, &func->variable_vector_lists, list) {
+		list_for_each_entry(vector, &runtime->variable_vector_lists, list) {
 			list_for_each_entry(pos, &vector->variable_lists, list) {
 				if (!strcmp(pos->name, name)) {
 					return pos;
@@ -99,8 +108,8 @@ struct variable *variable_find(struct context *ctx, const char *name)
 			}
 		}
 
-		for (i = 0; i < func->fargc; i++) {
-			pos = &(func->fargv[i]);
+		for (i = 0; i < runtime->argc; i++) {
+			pos = &(runtime->argv[i]);
 			if (!strcmp(pos->name, name)) {
 				return pos;
 			}
@@ -119,15 +128,15 @@ struct variable *variable_find(struct context *ctx, const char *name)
 
 struct variable_vector *current_variable_vector(struct context *ctx)
 {
-	struct function *func = NULL;
+	struct function_runtime *runtime = NULL;
 	struct variable_vector *vector = NULL;
 
 	if (list_empty(&ctx->used_lists)) {
 		return &ctx->variable_vector;
 	}
 
-	func = list_first_entry(&ctx->used_lists, struct function, used);
-	vector = list_first_entry(&func->variable_vector_lists,
+	runtime = list_first_entry(&ctx->used_lists, struct function_runtime, list);
+	vector = list_first_entry(&runtime->variable_vector_lists,
 		struct variable_vector, list);
 	return vector;
 }
@@ -323,7 +332,7 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	}
 
 	func->retval = express->argv[0];
-	ret = atith_express_value_init(&func->return_value, express->argv[0]);
+	ret = atith_express_value_init(&func->freturn_value, express->argv[0]);
 	if (ret < 0) {
 		free(func->fargv);
 		free(func);
@@ -459,7 +468,7 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 		}
 		return 0;
 	} else if (!strcmp(express->operation, "return")) {
-		struct function *func = NULL;
+		struct function_runtime *runtime = NULL;
 
 		ret = do_arithmetic_expression(ctx, express->argv[0], &result);
 		if (ret < 0) {
@@ -467,13 +476,10 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 		}
 
 		ctx->flag_returned = 1;
-		func = list_first_entry(&ctx->used_lists, struct function, used);
-		if (func == NULL) {
-			return -EINVAL;
-		}
-
+		runtime = list_first_entry(&ctx->used_lists,
+			struct function_runtime, list);
 		arith_express_value_print("return", &result);
-		return arith_express_value_convert(&func->return_value, &result);
+		return arith_express_value_convert(&runtime->return_value, &result);
 	}
 	return 0;
 }
@@ -500,13 +506,11 @@ int do_expressions(struct context *ctx, struct expression *express)
 	return 0;
 }
 
-int do_call_function(struct context *ctx, const char *fname,
-	struct arith_express_value *results, const size_t result_size,
-	struct arith_express_value *result)
+int alloc_function_runtime(struct context *ctx, const char *fname,
+	struct function_runtime **rfunc_ret)
 {
+	struct function_runtime *runtime = NULL;
 	struct function *pos = NULL, *func = NULL;
-	struct variable_vector vector;
-	int ret = 0;
 	size_t i = 0;
 
 	list_for_each_entry(pos, &ctx->function_lists, list) {
@@ -519,8 +523,45 @@ int do_call_function(struct context *ctx, const char *fname,
 		return -EINVAL;
 	}
 
-	for (i = 0; i < func->fargc && i < result_size; i++) {
-		struct variable *var = &func->fargv[i];
+	runtime = malloc(sizeof(struct function_runtime) +
+			sizeof(struct variable) * func->fargc);
+	if (runtime == NULL) {
+		return -ENOMEM;
+	}
+
+	runtime->argc = func->fargc;
+	for (i = 0; i < func->fargc; i++) {
+		runtime->argv[i] = func->fargv[i];
+	}
+
+	runtime->func = func;
+	runtime->return_value = func->freturn_value;
+	INIT_LIST_HEAD(&runtime->variable_vector_lists);
+	*rfunc_ret = runtime;
+	return 0;
+}
+
+void free_function_runtime(struct function_runtime *runtime)
+{
+	/*TODO*/
+}
+
+int do_call_function(struct context *ctx, const char *fname,
+	struct arith_express_value *results, const size_t result_size,
+	struct arith_express_value *result)
+{
+	struct function_runtime *runtime = NULL;
+	struct variable_vector vector;
+	int ret = 0;
+	size_t i = 0;
+
+	ret = alloc_function_runtime(ctx, fname, &runtime);
+	if (ret < 0 || runtime == NULL) {
+		return ret;
+	}
+
+	for (i = 0; i < runtime->argc && i < result_size; i++) {
+		struct variable *var = &runtime->argv[i];
 
 		ret = arith_express_value_convert(&var->value, &results[i]);
 		if (ret < 0) {
@@ -529,16 +570,16 @@ int do_call_function(struct context *ctx, const char *fname,
 	}
 
 	INIT_LIST_HEAD(&vector.variable_lists);
-	INIT_LIST_HEAD(&func->variable_vector_lists);
-	list_add_tail(&vector.list, &func->variable_vector_lists);
+	list_add_tail(&vector.list, &runtime->variable_vector_lists);
 
-	list_add(&func->used, &ctx->used_lists);
+	list_add(&runtime->list, &ctx->used_lists);
 	ctx->flag_returned = 0;
-	ret = do_expressions(ctx, func->express);
-	arith_express_value_convert(result, &func->return_value);
+	ret = do_expressions(ctx, runtime->func->express);
+	arith_express_value_convert(result, &runtime->return_value);
 	ctx->flag_returned = 0;
-	list_del(&func->used);
+	list_del(&runtime->list);
 	list_del(&vector.list);
+	free_function_runtime(runtime);
 	return ret;
 }
 
