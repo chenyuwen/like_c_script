@@ -43,8 +43,9 @@ struct function {
 struct function_runtime {
 	struct list_head list;
 	struct function *func;
-
 	struct arith_express_value return_value;
+
+	struct variable_vector default_vector;
 	struct list_head variable_vector_lists;
 
 	size_t argc;
@@ -534,16 +535,27 @@ int alloc_function_runtime(struct context *ctx, const char *fname,
 		runtime->argv[i] = func->fargv[i];
 	}
 
+	INIT_LIST_HEAD(&runtime->variable_vector_lists);
+	INIT_LIST_HEAD(&runtime->default_vector.variable_lists);
+	list_add_tail(&runtime->default_vector.list, &runtime->variable_vector_lists);
+
 	runtime->func = func;
 	runtime->return_value = func->freturn_value;
-	INIT_LIST_HEAD(&runtime->variable_vector_lists);
 	*rfunc_ret = runtime;
 	return 0;
 }
 
 void free_function_runtime(struct function_runtime *runtime)
 {
-	/*TODO*/
+	struct variable *pos, *save;
+	struct variable_vector *vector = &runtime->default_vector;
+
+	list_for_each_entry_safe(pos, save, &vector->variable_lists, list) {
+		list_del(&pos->list);
+		free(pos);
+	}
+
+	free(runtime);
 }
 
 int do_call_function(struct context *ctx, const char *fname,
@@ -551,7 +563,6 @@ int do_call_function(struct context *ctx, const char *fname,
 	struct arith_express_value *result)
 {
 	struct function_runtime *runtime = NULL;
-	struct variable_vector vector;
 	int ret = 0;
 	size_t i = 0;
 
@@ -569,18 +580,27 @@ int do_call_function(struct context *ctx, const char *fname,
 		}
 	}
 
-	INIT_LIST_HEAD(&vector.variable_lists);
-	list_add_tail(&vector.list, &runtime->variable_vector_lists);
-
 	list_add(&runtime->list, &ctx->used_lists);
 	ctx->flag_returned = 0;
 	ret = do_expressions(ctx, runtime->func->express);
 	arith_express_value_convert(result, &runtime->return_value);
 	ctx->flag_returned = 0;
 	list_del(&runtime->list);
-	list_del(&vector.list);
 	free_function_runtime(runtime);
 	return ret;
+}
+
+static void free_context(struct context *ctx)
+{
+	struct function *pos, *save;
+
+	list_for_each_entry_safe(pos, save, &ctx->function_lists, list) {
+		list_del(&pos->list);
+		if (pos->fargv != NULL) {
+			free(pos->fargv);
+		}
+		free(pos);
+	}
 }
 
 %}
@@ -720,7 +740,9 @@ int main(int argc, char ** argv)
 	}
 
 	atith_express_value_init(&result, NULL);
-	return do_call_function(&ctx, "main", NULL, 0, &result);
+	ret = do_call_function(&ctx, "main", NULL, 0, &result);
+	free_context(&ctx);
+	return ret;
 }
 
 void yyerror(char *s)
