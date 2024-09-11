@@ -17,7 +17,7 @@ int arith_express_value_init(struct arith_express_value *value,
 		return 0;
 	}
 
-	data_type = express->argv[0];
+	data_type = TO_STRING(express->argv[0]);
 	if (!strcmp(data_type, "int")) {
 		value->type = AE_TYPE_INT;
 		value->intval = 0;

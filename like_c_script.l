@@ -2,8 +2,8 @@
 %{
 #include <stdlib.h>
 #include "like_c_script.tab.h"
+#include "expression.h"
 
-struct expression *alloc_expression(void);
 %}
 
 %%
@@ -27,7 +27,7 @@ struct expression *alloc_expression(void);
 "<"  |
 ">"  |
 ">=" |
-"<=" { yylval.strval = strdup(yytext); return CMP; }
+"<=" { yylval.strval = TO_EXPRESS(strdup(yytext)); return CMP; }
 
 "if"    { return IF; }
 "while" { return WHILE; }
@@ -40,11 +40,11 @@ struct expression *alloc_expression(void);
 
 "//".* {}
 
-[a-zA-Z_]+[0-9a-zA-Z_]* {yylval.strval = strdup(yytext);return SYMBOL;}
+[a-zA-Z_]+[0-9a-zA-Z_]* { yylval.strval = TO_EXPRESS(strdup(yytext));return SYMBOL;}
 
-[0-9]+ {yylval.strval = strdup(yytext);return NUMBER;}
-0x[0-9a-fA-F]+ {yylval.strval = strdup(yytext); return NUMBER;}
-[0-9]+.[0-9]+ {yylval.strval = strdup(yytext); return NUMBER;}
+[0-9]+ {yylval.strval = TO_EXPRESS(strdup(yytext));return NUMBER;}
+0x[0-9a-fA-F]+ {yylval.strval = TO_EXPRESS(strdup(yytext)); return NUMBER;}
+[0-9]+.[0-9]+ {yylval.strval = TO_EXPRESS(strdup(yytext)); return NUMBER;}
 "#".* {}
 [ \t\n]  {}
 .  {printf("Mystery character:%c\n", *yytext);}

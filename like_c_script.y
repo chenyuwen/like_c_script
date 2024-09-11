@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "expression.h"
 #include "arith_express_value.h"
@@ -79,13 +80,14 @@ struct expression *alloc_expression(const char *operation, const size_t argc, ..
 	}
 	va_end(args);
 
+	express->argc = argc;
 	express->operation = operation;
 	return express;
 }
 
 int do_number(struct expression *express, struct arith_express_value *result)
 {
-	const char *num = express->argv[0];
+	const char *num = TO_STRING(express->argv[0]);
 
 	return arith_express_value_init_by_num(result, num);
 }
@@ -153,7 +155,7 @@ int do_call_with_expression(struct context *ctx, struct expression *express,
 	struct arith_express_value *result)
 {
 	struct expression *next = NULL;
-	const char *fname = express->argv[0];
+	const char *fname = TO_STRING(express->argv[0]);
 	struct arith_express_value *argv = NULL;
 	size_t argc = 0, i = 0;
 	int ret = 0;
@@ -188,7 +190,7 @@ int do_cmp_expression(struct context *ctx, struct expression *express,
 {
 	int ret = 0;
 	struct arith_express_value arg1, arg2;
-	const char *cmp = express->argv[1];
+	const char *cmp = TO_STRING(express->argv[1]);
 
 	arith_express_value_init(&arg1, NULL);
 	arith_express_value_init(&arg2, NULL);
@@ -248,7 +250,7 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	} else if (!strcmp(express->operation, "symbol")) {
 		struct variable *var = NULL;
 
-		var = variable_find(ctx, express->argv[0]);
+		var = variable_find(ctx, TO_STRING(express->argv[0]));
 		if (var == NULL) {
 			return -EINVAL;
 		}
@@ -293,7 +295,7 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 			return -ENOMEM;
 		}
 
-		var->name = var_exp->argv[0];
+		var->name = TO_STRING(var_exp->argv[0]);
 		ret = arith_express_value_init(&var->value, express->argv[0]);
 		if (ret < 0) {
 			free(var);
@@ -361,14 +363,14 @@ int do_declare_function(struct context *ctx, struct expression *express)
 			free(func);
 			return ret;
 		}
-		var->name = next->argv[1];
+		var->name = TO_STRING(next->argv[1]);
 		printf("argument: %s\n", var->name);
 	}
 
-	func->name = express->argv[1];
+	func->name = TO_STRING(express->argv[1]);
 	func->express = express->argv[3];
 	list_add(&func->list, &ctx->function_lists);
-	printf("FUNC name %s: \n", (const char *)express->argv[1]);
+	printf("FUNC name %s: \n", TO_STRING(express->argv[1]));
 	return 0;
 }
 
@@ -410,7 +412,7 @@ int pretreat_root(struct context *ctx, struct expression *express)
 int __do_symbol_equal(struct context *ctx, struct expression *express)
 {
 	struct variable *var = NULL;
-	const char *varname = express->argv[0];
+	const char *varname = TO_STRING(express->argv[0]);
 	int ret = 0;
 
 	var = variable_find(ctx, varname);
@@ -609,6 +611,34 @@ static void free_context(struct context *ctx)
 	}
 }
 
+static void __free_expression(struct expression *express)
+{
+	struct expression *next = NULL;
+	size_t i = 0;
+
+	for (i = 0; i < express->argc; i++) {
+		next = express->argv[i];
+		if (next == NULL) {
+			continue;
+		}
+
+		express->argv[i] = NULL;
+		if (IS_STRING(next)) {
+			free(TO_STRING(next));
+			continue;
+		}
+
+		__free_expression(next);
+		free(next);
+	}
+}
+
+static void free_expression(struct expression *express)
+{
+	__free_expression(express);
+	free(express);
+}
+
 %}
 
 %union {
@@ -672,10 +702,10 @@ variable_symbol:
 	;
 
 data_type:
-	  DATA_TYPE_INT { $$= alloc_expression("data_type", 1, "int"); }
-	| DATA_TYPE_FLOAT{ $$= alloc_expression("data_type", 1, "float"); }
-	| DATA_TYPE_VOLD { $$= alloc_expression("data_type", 1, "vold"); }
-	| DATA_TYPE_STRUCT SYMBOL { $$= alloc_expression("data_type", 2, "struct", $2); }
+	  DATA_TYPE_INT { $$= alloc_expression("data_type", 1, TO_EXPRESS(strdup("int"))); }
+	| DATA_TYPE_FLOAT{ $$= alloc_expression("data_type", 1, TO_EXPRESS(strdup("float"))); }
+	| DATA_TYPE_VOLD { $$= alloc_expression("data_type", 1, TO_EXPRESS(strdup("vold"))); }
+	| DATA_TYPE_STRUCT SYMBOL { $$= alloc_expression("data_type", 2, TO_EXPRESS(strdup("struct")), $2); }
 	;
 
 declare_function:
@@ -748,6 +778,9 @@ int main(int argc, char ** argv)
 	arith_express_value_init(&result, NULL);
 	ret = do_call_function(&ctx, "main", NULL, 0, &result);
 	free_context(&ctx);
+
+	free_expression(root);
+	root = NULL;
 	return ret;
 }
 
