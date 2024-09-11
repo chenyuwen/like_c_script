@@ -85,13 +85,6 @@ struct expression *alloc_expression(const char *operation, const size_t argc, ..
 	return express;
 }
 
-int do_number(struct expression *express, struct arith_express_value *result)
-{
-	const char *num = TO_STRING(express->argv[0]);
-
-	return arith_express_value_init_by_num(result, num);
-}
-
 struct variable *variable_find(struct context *ctx, const char *name)
 {
 	struct variable_vector *vector;
@@ -246,7 +239,8 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 		}
 		return arith_express_value_calculate1(result, CAL1_OPT_INVERT);
 	} else if (!strcmp(express->operation, "number")) {
-		return do_number(express, result);
+		const char *num = TO_STRING(express->argv[0]);
+		return arith_express_value_init_by_num(result, num);
 	} else if (!strcmp(express->operation, "symbol")) {
 		struct variable *var = NULL;
 
