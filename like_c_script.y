@@ -252,9 +252,7 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 		if (var == NULL) {
 			return -EINVAL;
 		}
-		/*TODO*/
-		*result = var->value;
-		return 0;
+		return arith_express_value_convert(result, &var->value);
 	} else if (!strcmp(express->operation, "call")) {
 		ret = do_call_with_expression(ctx, express, &arg1);
 		return arith_express_value_convert(result, &arg1);
