@@ -6,6 +6,7 @@ enum arith_express_type {
 	AE_TYPE_FLOAT,
 	AE_TYPE_CHAR,
 	AE_TYPE_VOLD,
+	AE_TYPE_NOT_SET,
 };
 
 struct arith_express_value {

@@ -12,7 +12,7 @@ int arith_express_value_init(struct arith_express_value *value,
 	const char *data_type = NULL;
 
 	if (express == NULL) {
-		value->type = AE_TYPE_INT;
+		value->type = AE_TYPE_NOT_SET;
 		value->intval = 0;
 		return 0;
 	}
@@ -229,6 +229,9 @@ int arith_express_value_convert(struct arith_express_value *dest,
 	case AE_TYPE_VOLD:
 		dest->intval = 0;
 		break;
+	case AE_TYPE_NOT_SET:
+		*dest = *src;
+		break;
 	default:
 		printf("Error %s: %d\n", __func__, __LINE__);
 		return -EINVAL;
@@ -265,5 +268,6 @@ int arith_express_value_equal(struct arith_express_value *value, int intval)
 	case AE_TYPE_CHAR:
 		return (intval == value->charval);
 	}
+	printf("Error %s: %d\n", __func__, __LINE__);
 	return 0;
 }
