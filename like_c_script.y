@@ -87,7 +87,7 @@ int do_number(struct expression *express, struct arith_express_value *result)
 {
 	const char *num = express->argv[0];
 
-	return atith_express_value_init_by_num(result, num);
+	return arith_express_value_init_by_num(result, num);
 }
 
 struct variable *variable_find(struct context *ctx, const char *name)
@@ -154,7 +154,7 @@ int do_call_with_expression(struct context *ctx, struct expression *express,
 {
 	struct expression *next = NULL;
 	const char *fname = express->argv[0];
-	struct arith_express_value *fargv = NULL;
+	struct arith_express_value *argv = NULL;
 	size_t argc = 0, i = 0;
 	int ret = 0;
 
@@ -162,23 +162,24 @@ int do_call_with_expression(struct context *ctx, struct expression *express,
 		argc++;
 	}
 
-	fargv = malloc(sizeof(struct arith_express_value) * argc);
-	if (fargv == NULL) {
+	argv = malloc(sizeof(struct arith_express_value) * argc);
+	if (argv == NULL) {
 		return -ENOMEM;
 	}
 
 	for (next = express->argv[1]; next != NULL; next = next->argv[1]) {
-		struct arith_express_value *tmp = &fargv[i++];
+		struct arith_express_value *tmp = &argv[i++];
 
+		arith_express_value_init(tmp, NULL);
 		ret = do_arithmetic_expression(ctx, next->argv[0], tmp);
 		if (ret < 0) {
-			free(fargv);
+			free(argv);
 			return ret;
 		}
 	}
 
-	ret = do_call_function(ctx, fname, fargv, argc, result);
-	free(fargv);
+	ret = do_call_function(ctx, fname, argv, argc, result);
+	free(argv);
 	return ret;
 }
 
@@ -189,8 +190,8 @@ int do_cmp_expression(struct context *ctx, struct expression *express,
 	struct arith_express_value arg1, arg2;
 	const char *cmp = express->argv[1];
 
-	atith_express_value_init(&arg1, NULL);
-	atith_express_value_init(&arg2, NULL);
+	arith_express_value_init(&arg1, NULL);
+	arith_express_value_init(&arg2, NULL);
 
 	ret = do_arithmetic_expression(ctx, express->argv[0], &arg1);
 	if (ret < 0) {
@@ -225,8 +226,8 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 	struct arith_express_value arg1, arg2;
 	int ret = 0;
 
-	atith_express_value_init(&arg1, NULL);
-	atith_express_value_init(&arg2, NULL);
+	arith_express_value_init(&arg1, NULL);
+	arith_express_value_init(&arg2, NULL);
 
 	if (!strcmp(express->operation, "abs")) {
 		ret = do_arithmetic_expression(ctx, express->argv[0], result);
@@ -288,13 +289,14 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 		struct expression *var_exp = next->argv[0];
 		struct arith_express_value result;
 
+		arith_express_value_init(&result, NULL);
 		var = malloc(sizeof(struct variable));
 		if (var == NULL) {
 			return -ENOMEM;
 		}
 
 		var->name = var_exp->argv[0];
-		ret = atith_express_value_init(&var->value, express->argv[0]);
+		ret = arith_express_value_init(&var->value, express->argv[0]);
 		if (ret < 0) {
 			free(var);
 			return ret;
@@ -333,7 +335,7 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	}
 
 	func->retval = express->argv[0];
-	ret = atith_express_value_init(&func->freturn_value, express->argv[0]);
+	ret = arith_express_value_init(&func->freturn_value, express->argv[0]);
 	if (ret < 0) {
 		free(func->fargv);
 		free(func);
@@ -355,7 +357,7 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
 		struct variable *var = &(func->fargv[i++]);
 
-		ret = atith_express_value_init(&var->value, next->argv[0]);
+		ret = arith_express_value_init(&var->value, next->argv[0]);
 		if (ret < 0) {
 			free(func->fargv);
 			free(func);
@@ -434,7 +436,7 @@ int do_logical_expression(struct context *ctx, struct expression *express)
 	int ret = 0;
 
 	printf("do %s\n", express->operation);
-	atith_express_value_init(&result, NULL);
+	arith_express_value_init(&result, NULL);
 	if (!strcmp(express->operation, "declare_variable")) {
 		return do_declare_variable(ctx, express->argv[0]);
 	} else if (!strcmp(express->operation, "expression")) {
@@ -583,7 +585,13 @@ int do_call_function(struct context *ctx, const char *fname,
 	list_add(&runtime->list, &ctx->used_lists);
 	ctx->flag_returned = 0;
 	ret = do_expressions(ctx, runtime->func->express);
-	arith_express_value_convert(result, &runtime->return_value);
+	if (ret < 0) {
+		goto out;
+	}
+
+	ret = arith_express_value_convert(result, &runtime->return_value);
+
+out:
 	ctx->flag_returned = 0;
 	list_del(&runtime->list);
 	free_function_runtime(runtime);
@@ -739,7 +747,7 @@ int main(int argc, char ** argv)
 		return ret;
 	}
 
-	atith_express_value_init(&result, NULL);
+	arith_express_value_init(&result, NULL);
 	ret = do_call_function(&ctx, "main", NULL, 0, &result);
 	free_context(&ctx);
 	return ret;

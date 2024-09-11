@@ -6,7 +6,7 @@
 #include "expression.h"
 #include "arith_express_value.h"
 
-int atith_express_value_init(struct arith_express_value *value,
+int arith_express_value_init(struct arith_express_value *value,
 	struct expression *express)
 {
 	const char *data_type = NULL;
@@ -35,7 +35,7 @@ int atith_express_value_init(struct arith_express_value *value,
 	return 0;
 }
 
-int atith_express_value_init_by_num(struct arith_express_value *value,
+int arith_express_value_init_by_num(struct arith_express_value *value,
 	const char *number)
 {
 	int is_float = !!strchr(number, '.');

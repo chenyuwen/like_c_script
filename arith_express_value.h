@@ -18,10 +18,10 @@ struct arith_express_value {
 	};
 };
 
-int atith_express_value_init(struct arith_express_value *value,
+int arith_express_value_init(struct arith_express_value *value,
 	struct expression *express);
 
-int atith_express_value_init_by_num(struct arith_express_value *value,
+int arith_express_value_init_by_num(struct arith_express_value *value,
 	const char *number);
 
 #define CAL2_OPT_EQUAL 1000
