@@ -97,27 +97,33 @@ static int arith_express_value_calculate2_##__type(struct arith_express_value *r
 		result->__valuename |= arith_express_value_to_##__type(value); \
 		break; \
 	case CAL2_OPT_EQUAL: \
-		result->__valuename = (result->__valuename == value->__valuename); \
+		result->intval = (result->__valuename == \
+			arith_express_value_to_##__type(value)); \
 		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_NOT_EQUAL: \
-		result->__valuename = (result->__valuename != value->__valuename); \
+		result->intval = (result->__valuename != \
+			arith_express_value_to_##__type(value)); \
 		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_LESS: \
-		result->__valuename = (result->__valuename < value->__valuename); \
+		result->intval = (result->__valuename < \
+			arith_express_value_to_##__type(value)); \
 		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_LESS_EQUAL: \
-		result->__valuename = (result->__valuename <= value->__valuename); \
+		result->intval = (result->__valuename <= \
+			arith_express_value_to_##__type(value)); \
 		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_GREAT: \
-		result->__valuename = (result->__valuename > value->__valuename); \
+		result->intval = (result->__valuename > \
+			arith_express_value_to_##__type(value)); \
 		result->type = AE_TYPE_INT; \
 		break; \
 	case CAL2_OPT_GREAT_EQUAL: \
-		result->__valuename = (result->__valuename >= value->__valuename); \
+		result->intval = (result->__valuename >= \
+			arith_express_value_to_##__type(value)); \
 		result->type = AE_TYPE_INT; \
 		break; \
 	default: \
