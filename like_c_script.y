@@ -254,6 +254,12 @@ int do_arithmetic_expression(struct context *ctx, struct expression *express,
 		return arith_express_value_convert(result, &arg1);
 	} else if (!strcmp(express->operation, "cmp")) {
 		return do_cmp_expression(ctx, express, result);
+	} else if (!strcmp(express->operation, "symbol_point")) {
+		/*TODO*/
+		return 0;
+	} else if (!strcmp(express->operation, "symbol_address")) {
+		/*TODO*/
+		return 0;
 	}
 
 	ret = do_arithmetic_expression(ctx, express->argv[0], &arg1);
@@ -289,7 +295,8 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 			return -ENOMEM;
 		}
 
-		var->name = TO_STRING(var_exp->argv[0]);
+		/*TODO: pt*/
+		var->name = TO_STRING(var_exp->argv[1]);
 		ret = arith_express_value_init(&var->value, express->argv[0]);
 		if (ret < 0) {
 			free(var);
@@ -297,8 +304,8 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 		}
 
 		arith_express_value_print(var->name, &var->value);
-		if (var_exp->argv[1] != NULL) {
-			ret = do_arithmetic_expression(ctx, var_exp->argv[1],
+		if (var_exp->argv[2] != NULL) {
+			ret = do_arithmetic_expression(ctx, var_exp->argv[2],
 				&result);
 			if (ret < 0) {
 				free(var);
@@ -317,6 +324,7 @@ int do_declare_variable(struct context *ctx, struct expression *express)
 	return 0;
 }
 
+/*TODO*/
 int do_declare_function(struct context *ctx, struct expression *express)
 {
 	struct function *func = NULL;
@@ -336,9 +344,9 @@ int do_declare_function(struct context *ctx, struct expression *express)
 		return ret;
 	}
 
-	func->arguments = express->argv[2];
+	func->arguments = express->argv[3];
 	func->fargc = 0;
-	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
+	for (next = express->argv[2]; next != NULL; next = next->argv[3]) {
 		func->fargc++;
 	}
 
@@ -349,7 +357,7 @@ int do_declare_function(struct context *ctx, struct expression *express)
 	}
 
 	printf("FUNC: %s \n", TO_STRING(express->argv[1]));
-	for (next = express->argv[2]; next != NULL; next = next->argv[2]) {
+	for (next = express->argv[2]; next != NULL; next = next->argv[3]) {
 		struct variable *var = &(func->fargv[i++]);
 
 		ret = arith_express_value_init(&var->value, next->argv[0]);
@@ -358,7 +366,7 @@ int do_declare_function(struct context *ctx, struct expression *express)
 			free(func);
 			return ret;
 		}
-		var->name = TO_STRING(next->argv[1]);
+		var->name = TO_STRING(next->argv[2]);
 		printf("ARG: %s\n", var->name);
 	}
 
@@ -655,7 +663,7 @@ static void free_expression(struct expression *express)
 %type <express> data_type declare_function
 %type <express> variable_symbol variable_symbols
 %type <express> function_arguments declare_variable
-%type <express> root
+%type <express> root pt_type
 
 /*declare tokens */
 %token <strval> CMP
@@ -663,7 +671,7 @@ static void free_expression(struct expression *express)
 %token <strval> SYMBOL
 %token IF WHILE RETURN
 %token DATA_TYPE_INT DATA_TYPE_FLOAT DATA_TYPE_VOLD DATA_TYPE_STRUCT
-%token DATA_TYPE_CHAR
+%token DATA_TYPE_CHAR DATA_STRING
 
 %%
 
@@ -691,15 +699,23 @@ variable_symbols:
 	;
 
 variable_symbol:
-	  SYMBOL { $$= alloc_expression("variable_symbol", 1, $1); }
-	| SYMBOL '=' arithmetic_expression { $$= alloc_expression("variable_symbol", 2, $1, $3); }
+	  SYMBOL { $$= alloc_expression("variable_symbol", 3, NULL, $1, NULL); }
+	| SYMBOL '=' arithmetic_expression { $$= alloc_expression("variable_symbol", 3, NULL, $1, $3); }
+	| pt_type SYMBOL { $$= alloc_expression("variable_symbol", 3, $1, $2, NULL); }
+	| pt_type SYMBOL '=' arithmetic_expression { $$= alloc_expression("variable_symbol", 3, $1, $2, $4);}
 	;
 
 data_type:
 	  DATA_TYPE_INT { $$= alloc_expression("data_type", 1, TO_EXPRESS(strdup("int"))); }
 	| DATA_TYPE_FLOAT{ $$= alloc_expression("data_type", 1, TO_EXPRESS(strdup("float"))); }
 	| DATA_TYPE_VOLD { $$= alloc_expression("data_type", 1, TO_EXPRESS(strdup("vold"))); }
+	| DATA_TYPE_CHAR { $$= alloc_expression("data_type", 1, TO_EXPRESS(strdup("char"))); }
 	| DATA_TYPE_STRUCT SYMBOL { $$= alloc_expression("data_type", 2, TO_EXPRESS(strdup("struct")), $2); }
+	;
+
+pt_type:
+	 '*' { $$= alloc_expression("pt_type", 1, NULL); }
+	| '*' pt_type { $$= alloc_expression("pt_type", 1, $2); }
 	;
 
 declare_function:
@@ -709,8 +725,10 @@ declare_function:
 
 function_arguments:
 	  { $$ = NULL; }
-	| data_type SYMBOL { $$ = alloc_expression("function_arguments", 3, $1, $2, NULL); }
-	| data_type SYMBOL ',' function_arguments { $$ = alloc_expression("function_arguments", 3, $1, $2, $4); }
+	| data_type SYMBOL { $$ = alloc_expression("function_arguments", 4, $1, NULL, $2, NULL); }
+	| data_type SYMBOL ',' function_arguments { $$ = alloc_expression("function_arguments", 4, $1, NULL, $2, $4); }
+	| data_type pt_type SYMBOL { $$ = alloc_expression("function_arguments", 4, $1, $2, $3, NULL); }
+	| data_type pt_type SYMBOL ',' function_arguments { $$ = alloc_expression("function_arguments", 4, $1, $2, $3, $5); }
 	;
 
 expressions:
@@ -741,8 +759,10 @@ arithmetic_expression:
 	| '(' arithmetic_expression ')' { $$ = alloc_expression("(", 1, $2); }
 	| '-' arithmetic_expression     { $$ = alloc_expression("invert", 1, $2); }
 	| NUMBER      { $$ = alloc_expression("number", 1, $1); }
-	| SYMBOL      { $$ = alloc_expression("symbol", 1, $1); }
 	| SYMBOL '(' arguments ')' { $$ = alloc_expression("call", 2, $1, $3); }
+	| SYMBOL      { $$ = alloc_expression("symbol", 1, $1); }
+	| pt_type SYMBOL      { $$ = alloc_expression("symbol_point", 2, $1, $2); }
+	| '&' SYMBOL      { $$ = alloc_expression("symbol_address", 1, $2); }
 	;
 
 arguments:
